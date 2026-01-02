@@ -2,11 +2,11 @@ spec:
   name: sherlock-deduction-engine
   region: nyc
 
-  # Backend service
   services:
+    # Backend service
     - name: backend
-      source_dir: /backend
-      dockerfile_path: backend/Dockerfile
+      source_dir: backend
+      dockerfile_path: Dockerfile
       http_port: 5000
       instance_count: 1
       instance_size_slug: basic-xs
@@ -22,9 +22,10 @@ spec:
       health_check:
         http_path: /api/questions
 
+    # Frontend service
     - name: frontend
-      source_dir: /frontend
-      dockerfile_path: frontend/Dockerfile
+      source_dir: frontend
+      dockerfile_path: Dockerfile
       http_port: 80
       instance_count: 1
       instance_size_slug: basic-xxs
@@ -35,7 +36,6 @@ spec:
           scope: RUN_TIME
           value: ${backend.PRIVATE_URL}
 
-  # Managed PostgreSQL database with pgvector
   databases:
     - name: sherlock-db
       engine: PG
