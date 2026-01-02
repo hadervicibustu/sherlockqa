@@ -31,10 +31,6 @@ spec:
       instance_size_slug: basic-xxs
       routes:
         - path: /
-      envs:
-        - key: API_URL
-          scope: RUN_TIME
-          value: ${backend.PRIVATE_URL}
 
   databases:
     - name: sherlock-db
