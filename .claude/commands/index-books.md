@@ -1,6 +1,6 @@
 # Index Books for RAG
 
-Index all PDF books from the `/backend/books` folder into the RAG system.
+Index all PDF books from the `backend/books` folder into the RAG system.
 
 ## Instructions
 
