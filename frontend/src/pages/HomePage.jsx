@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../App';
 import { questionsApi, ragApi } from '../services/api';
 import QuestionList from '../components/Questions/QuestionList';
@@ -16,6 +16,8 @@ function HomePage() {
   const [toast, setToast] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isUploadingBook, setIsUploadingBook] = useState(false);
+  const fileInputRef = useRef(null);
 
   const fetchQuestions = useCallback(async () => {
     try {
@@ -86,6 +88,26 @@ function HomePage() {
     }
   };
 
+  const handleBookUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingBook(true);
+
+    try {
+      await ragApi.uploadBook(file);
+      await ragApi.indexDocuments();
+      showToast('Book uploaded and indexed successfully');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setIsUploadingBook(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-container">
@@ -118,6 +140,20 @@ function HomePage() {
                 <button className="add-question-btn" onClick={() => setIsModalOpen(true)}>
                   + Add Question
                 </button>
+                <button
+                  className="add-question-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingBook}
+                >
+                  {isUploadingBook ? 'Uploading...' : '+ Add Book'}
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".pdf"
+                  style={{ display: 'none' }}
+                  onChange={handleBookUpload}
+                />
               </div>
             </div>
 
