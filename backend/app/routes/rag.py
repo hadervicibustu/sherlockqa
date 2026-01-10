@@ -1,7 +1,49 @@
+import os
 from flask import Blueprint, request, jsonify
+from werkzeug.utils import secure_filename
 from ..services import RAGService
+from ..config import Config
 
 rag_bp = Blueprint("rag", __name__)
+
+ALLOWED_EXTENSIONS = {'.pdf'}
+
+
+def allowed_file(filename):
+    """Check if the file has an allowed extension."""
+    return os.path.splitext(filename.lower())[1] in ALLOWED_EXTENSIONS
+
+
+@rag_bp.route("/upload", methods=["POST"])
+def upload_book():
+    """Upload a PDF book to the books folder."""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"error": "Only PDF files are allowed"}), 400
+
+    filename = secure_filename(file.filename)
+
+    if not os.path.exists(Config.BOOKS_FOLDER):
+        os.makedirs(Config.BOOKS_FOLDER)
+
+    filepath = os.path.join(Config.BOOKS_FOLDER, filename)
+
+    if os.path.exists(filepath):
+        return jsonify({"error": f"File '{filename}' already exists"}), 409
+
+    file.save(filepath)
+
+    return jsonify({
+        "message": "File uploaded successfully",
+        "filename": filename
+    }), 201
 
 
 @rag_bp.route("/index", methods=["POST"])

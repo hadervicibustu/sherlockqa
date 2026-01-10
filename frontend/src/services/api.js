@@ -82,6 +82,24 @@ export const questionsApi = {
 
 // RAG API
 export const ragApi = {
+  uploadBook: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE_URL}/rag/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new ApiError(data.error || 'Upload failed', response.status);
+    }
+
+    return data;
+  },
+
   indexDocuments: () => request('/rag/index', {
     method: 'POST',
   }),
