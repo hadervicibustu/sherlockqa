@@ -1,0 +1,166 @@
+@startuml Ask Holmes - Activity Diagram - Questions CRUD
+
+title Activity Diagram: Questions CRUD Operations
+
+|User|
+|System|
+
+' ============================================
+' CREATE QUESTION
+' ============================================
+|User|
+start
+:Click "New Question" button;
+
+|System|
+:Open Create Question Modal;
+:Display empty form with title and content fields;
+
+|User|
+:Enter question title;
+:Enter question content;
+:Click "Save" button;
+
+|System|
+if (Validate input?) then (valid)
+    :Send POST request to /api/questions;
+    :Create question in database;
+    :Generate timestamp;
+    :Return success response;
+    :Close modal;
+    :Display success toast notification;
+    :Refresh questions list;
+    :Display new question in list;
+else (invalid)
+    :Display validation error message;
+    :Highlight invalid fields;
+    |User|
+    :Correct input errors;
+    note right: User returns to enter data
+endif
+
+|User|
+stop
+
+' ============================================
+' READ QUESTIONS (VIEW LIST)
+' ============================================
+|User|
+start
+:Navigate to Questions page;
+
+|System|
+:Send GET request to /api/questions;
+:Fetch user's questions from database;
+
+if (Questions exist?) then (yes)
+    :Return questions array;
+    :Render questions list;
+    :Display question cards with title, preview, date;
+else (no)
+    :Return empty array;
+    :Display empty state message;
+    :Show "Create your first question" prompt;
+endif
+
+|User|
+stop
+
+' ============================================
+' READ QUESTION (VIEW DETAILS)
+' ============================================
+|User|
+start
+:Click on question card;
+
+|System|
+:Send GET request to /api/questions/{id};
+:Fetch question details from database;
+:Fetch associated answer if exists;
+:Return question with answer data;
+:Navigate to Question Details page;
+:Display question title and content;
+
+if (Answer exists?) then (yes)
+    :Display answer content;
+    :Show "Edit Answer" and "Clear Answer" buttons;
+else (no)
+    :Display empty answer section;
+    :Show "Enter Answer" and "Ask Holmes" buttons;
+endif
+
+|User|
+stop
+
+' ============================================
+' UPDATE QUESTION
+' ============================================
+|User|
+start
+:Click "Edit" button on question;
+
+|System|
+:Open Edit Question Modal;
+:Populate form with existing question data;
+
+|User|
+:Modify question title;
+:Modify question content;
+:Click "Save Changes" button;
+
+|System|
+if (Validate input?) then (valid)
+    :Send PUT request to /api/questions/{id};
+    :Update question in database;
+    :Update modified timestamp;
+    :Return success response;
+    :Close modal;
+    :Display success toast notification;
+    :Refresh question display;
+else (invalid)
+    :Display validation error message;
+    :Highlight invalid fields;
+    |User|
+    :Correct input errors;
+    note right: User returns to modify data
+endif
+
+|User|
+stop
+
+' ============================================
+' DELETE QUESTION
+' ============================================
+|User|
+start
+:Click "Delete" button on question;
+
+|System|
+:Open confirmation dialog;
+:Display "Are you sure?" message;
+
+|User|
+if (Confirm deletion?) then (yes)
+    :Click "Confirm Delete" button;
+
+    |System|
+    :Send DELETE request to /api/questions/{id};
+    :Delete question from database;
+    :Delete associated answer if exists;
+    :Return success response;
+    :Close confirmation dialog;
+    :Display success toast notification;
+    :Remove question from list;
+    :Navigate to Questions list page;
+else (no)
+    :Click "Cancel" button;
+
+    |System|
+    :Close confirmation dialog;
+    :Return to previous state;
+endif
+
+|User|
+stop
+
+@enduml

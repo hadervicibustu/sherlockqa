@@ -1,0 +1,218 @@
+@startuml Ask Holmes - Use Case Diagram
+
+title Ask Holmes Application - Use Case Diagram
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+' ============================================
+' ACTORS
+' ============================================
+actor "User" as User
+actor "Administrator" as Admin
+actor "Claude API" as Claude <<External System>>
+actor "Embedding Model" as EmbeddingModel <<External System>>
+
+' ============================================
+' SYSTEM BOUNDARY
+' ============================================
+rectangle "Ask Holmes Application" {
+
+    ' ============================================
+    ' AUTHENTICATION USE CASES
+    ' ============================================
+    package "Authentication" {
+        usecase "Register Account" as UC_Register
+        usecase "Login" as UC_Login
+        usecase "Logout" as UC_Logout
+        usecase "Maintain Session" as UC_Session
+        usecase "Validate Email Format" as UC_ValidateEmail
+        usecase "Check Email Availability" as UC_CheckEmail
+    }
+
+    ' ============================================
+    ' QUESTION MANAGEMENT USE CASES
+    ' ============================================
+    package "Question Management" {
+        usecase "Create Question" as UC_CreateQ
+        usecase "View Questions List" as UC_ViewQList
+        usecase "View Question Details" as UC_ViewQDetails
+        usecase "Edit Question" as UC_EditQ
+        usecase "Delete Question" as UC_DeleteQ
+        usecase "Validate Question Input" as UC_ValidateQ
+        usecase "Confirm Deletion" as UC_ConfirmDelete
+        usecase "Display Empty State" as UC_EmptyState
+    }
+
+    ' ============================================
+    ' ANSWER MANAGEMENT USE CASES
+    ' ============================================
+    package "Answer Management" {
+        usecase "Enter Manual Answer" as UC_ManualAnswer
+        usecase "Request AI Answer" as UC_RequestAI
+        usecase "Edit Answer" as UC_EditAnswer
+        usecase "Clear Answer" as UC_ClearAnswer
+        usecase "Regenerate AI Answer" as UC_RegenAnswer
+        usecase "Display Generated Answer" as UC_DisplayAnswer
+    }
+
+    ' ============================================
+    ' RAG PIPELINE USE CASES
+    ' ============================================
+    package "RAG Pipeline" {
+        usecase "Generate Answer from Documents" as UC_RAGGenerate
+        usecase "Search Similar Chunks" as UC_SearchChunks
+        usecase "Create Query Embedding" as UC_QueryEmbed
+        usecase "Assemble Context" as UC_AssembleContext
+        usecase "Generate LLM Response" as UC_LLMResponse
+        usecase "Handle Generation Error" as UC_HandleError
+    }
+
+    ' ============================================
+    ' DOCUMENT MANAGEMENT USE CASES
+    ' ============================================
+    package "Document Management" {
+        usecase "Upload PDF Document" as UC_UploadPDF
+        usecase "Index Document" as UC_IndexDoc
+        usecase "Extract Text from PDF" as UC_ExtractText
+        usecase "Split Text into Chunks" as UC_SplitChunks
+        usecase "Generate Chunk Embeddings" as UC_ChunkEmbed
+        usecase "Store Document Metadata" as UC_StoreMetadata
+        usecase "View Indexed Documents" as UC_ViewDocs
+        usecase "Delete Indexed Document" as UC_DeleteDoc
+        usecase "Detect Duplicate Document" as UC_DetectDupe
+    }
+
+    ' ============================================
+    ' USER INTERFACE USE CASES
+    ' ============================================
+    package "User Interface" {
+        usecase "Open Modal Dialog" as UC_OpenModal
+        usecase "Close Modal Dialog" as UC_CloseModal
+        usecase "Display Toast Notification" as UC_Toast
+        usecase "Show Loading Indicator" as UC_Loading
+        usecase "Display Error Message" as UC_ErrorMsg
+        usecase "Navigate to Home" as UC_NavHome
+    }
+
+}
+
+' ============================================
+' USER RELATIONSHIPS
+' ============================================
+' Authentication
+User --> UC_Register
+User --> UC_Login
+User --> UC_Logout
+
+' Question Management
+User --> UC_CreateQ
+User --> UC_ViewQList
+User --> UC_ViewQDetails
+User --> UC_EditQ
+User --> UC_DeleteQ
+
+' Answer Management
+User --> UC_ManualAnswer
+User --> UC_RequestAI
+User --> UC_EditAnswer
+User --> UC_ClearAnswer
+User --> UC_RegenAnswer
+
+' ============================================
+' ADMINISTRATOR RELATIONSHIPS
+' ============================================
+Admin --> UC_UploadPDF
+Admin --> UC_IndexDoc
+Admin --> UC_ViewDocs
+Admin --> UC_DeleteDoc
+Admin --|> User : extends
+
+' ============================================
+' EXTERNAL SYSTEM RELATIONSHIPS
+' ============================================
+Claude --> UC_LLMResponse
+EmbeddingModel --> UC_QueryEmbed
+EmbeddingModel --> UC_ChunkEmbed
+
+' ============================================
+' INCLUDE RELATIONSHIPS
+' ============================================
+' Authentication includes
+UC_Register ..> UC_ValidateEmail : <<include>>
+UC_Register ..> UC_CheckEmail : <<include>>
+UC_Login ..> UC_Session : <<include>>
+
+' Question Management includes
+UC_CreateQ ..> UC_ValidateQ : <<include>>
+UC_CreateQ ..> UC_OpenModal : <<include>>
+UC_EditQ ..> UC_ValidateQ : <<include>>
+UC_EditQ ..> UC_OpenModal : <<include>>
+UC_DeleteQ ..> UC_ConfirmDelete : <<include>>
+UC_ViewQList ..> UC_EmptyState : <<include>>
+
+' Answer Management includes
+UC_RequestAI ..> UC_RAGGenerate : <<include>>
+UC_RequestAI ..> UC_Loading : <<include>>
+UC_RegenAnswer ..> UC_RAGGenerate : <<include>>
+
+' RAG Pipeline includes
+UC_RAGGenerate ..> UC_QueryEmbed : <<include>>
+UC_RAGGenerate ..> UC_SearchChunks : <<include>>
+UC_RAGGenerate ..> UC_AssembleContext : <<include>>
+UC_RAGGenerate ..> UC_LLMResponse : <<include>>
+
+' Document Management includes
+UC_IndexDoc ..> UC_ExtractText : <<include>>
+UC_IndexDoc ..> UC_SplitChunks : <<include>>
+UC_IndexDoc ..> UC_ChunkEmbed : <<include>>
+UC_IndexDoc ..> UC_StoreMetadata : <<include>>
+UC_UploadPDF ..> UC_DetectDupe : <<include>>
+
+' UI includes
+UC_CreateQ ..> UC_Toast : <<include>>
+UC_EditQ ..> UC_Toast : <<include>>
+UC_DeleteQ ..> UC_Toast : <<include>>
+
+' ============================================
+' EXTEND RELATIONSHIPS
+' ============================================
+UC_HandleError ..> UC_RAGGenerate : <<extend>>
+UC_ErrorMsg ..> UC_RequestAI : <<extend>>
+UC_DisplayAnswer ..> UC_RequestAI : <<extend>>
+
+' ============================================
+' NOTES
+' ============================================
+note right of User
+  Primary user of the application.
+  Can manage their own questions
+  and answers only (data isolation).
+end note
+
+note right of Admin
+  Administrator inherits all User
+  capabilities plus document
+  management functions.
+end note
+
+note right of Claude
+  External Anthropic Claude API
+  used for generating natural
+  language answers from context.
+end note
+
+note right of EmbeddingModel
+  Sentence Transformers model
+  (all-MiniLM-L6-v2) for creating
+  384-dimensional embeddings.
+end note
+
+note bottom of UC_RAGGenerate
+  Core RAG pipeline that combines
+  semantic search with LLM generation
+  to produce contextual answers.
+end note
+
+@enduml

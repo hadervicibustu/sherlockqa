@@ -1,0 +1,135 @@
+sequenceDiagram
+    actor User
+    participant Frontend as React Frontend
+    participant Backend as Flask API
+    participant Database as PostgreSQL
+
+    rect rgb(240, 248, 255)
+    Note over User,Database: Create Question
+
+    User->>Frontend: Click New Question button
+    Frontend->>Frontend: Open CreateQuestionModal
+    Frontend-->>User: Display empty form
+
+    User->>Frontend: Enter title and content
+    User->>Frontend: Click Save button
+    Frontend->>Frontend: Validate input
+
+    alt Valid Input
+        Frontend->>Backend: POST /api/questions
+        Backend->>Backend: Validate request data
+        Backend->>Backend: Get current user from session
+        Backend->>Database: INSERT INTO questions
+        Database-->>Backend: Return new question ID
+        Backend-->>Frontend: Return 201 Created
+        Frontend->>Frontend: Close modal
+        Frontend->>Frontend: Add question to state
+        Frontend-->>User: Display success toast
+        Frontend-->>User: Show new question in list
+    else Invalid Input
+        Frontend-->>User: Display validation errors
+        Frontend-->>User: Highlight invalid fields
+    end
+    end
+
+    rect rgb(255, 248, 240)
+    Note over User,Database: Read Questions List
+
+    User->>Frontend: Navigate to Questions page
+    Frontend->>Backend: GET /api/questions
+    Backend->>Backend: Get current user from session
+    Backend->>Database: SELECT questions by user
+    Database-->>Backend: Return questions array
+    Backend-->>Frontend: Return 200 OK
+
+    alt Questions Exist
+        Frontend-->>User: Render questions list
+        Frontend-->>User: Display question cards
+    else No Questions
+        Frontend-->>User: Display empty state
+        Frontend-->>User: Show create first question prompt
+    end
+    end
+
+    rect rgb(240, 255, 240)
+    Note over User,Database: Read Question Details
+
+    User->>Frontend: Click on question card
+    Frontend->>Backend: GET /api/questions/id
+    Backend->>Backend: Get current user from session
+    Backend->>Database: SELECT question by id and user
+    Database-->>Backend: Return question data
+    Backend->>Database: SELECT answer by question id
+    Database-->>Backend: Return answer data
+    Backend-->>Frontend: Return 200 OK
+
+    Frontend->>Frontend: Navigate to page
+    Frontend-->>User: Display question content
+
+    alt Answer Exists
+        Frontend-->>User: Display answer content
+        Frontend-->>User: Show Edit and Clear buttons
+    else No Answer
+        Frontend-->>User: Display empty answer section
+        Frontend-->>User: Show Ask Holmes button
+    end
+    end
+
+    rect rgb(255, 255, 240)
+    Note over User,Database: Update Question
+
+    User->>Frontend: Click Edit button
+    Frontend->>Frontend: Open EditQuestionModal
+    Frontend-->>User: Display form with data
+
+    User->>Frontend: Modify title or content
+    User->>Frontend: Click Save Changes
+    Frontend->>Frontend: Validate input
+
+    alt Valid Input
+        Frontend->>Backend: PUT /api/questions/id
+        Backend->>Backend: Validate request data
+        Backend->>Backend: Get current user from session
+        Backend->>Database: SELECT question by id
+        Database-->>Backend: Return question
+        Backend->>Database: UPDATE question
+        Database-->>Backend: Return updated question
+        Backend-->>Frontend: Return 200 OK
+        Frontend->>Frontend: Close modal
+        Frontend->>Frontend: Update question in state
+        Frontend-->>User: Display success toast
+        Frontend-->>User: Show updated question
+    else Invalid Input
+        Frontend-->>User: Display validation errors
+        Frontend-->>User: Highlight invalid fields
+    end
+    end
+
+    rect rgb(255, 240, 245)
+    Note over User,Database: Delete Question
+
+    User->>Frontend: Click Delete button
+    Frontend->>Frontend: Open confirmation dialog
+    Frontend-->>User: Display confirmation message
+
+    alt Confirm Deletion
+        User->>Frontend: Click Confirm Delete
+        Frontend->>Backend: DELETE /api/questions/id
+        Backend->>Backend: Get current user from session
+        Backend->>Database: SELECT question by id
+        Database-->>Backend: Return question
+        Backend->>Database: DELETE answer by question id
+        Database-->>Backend: Confirm deleted
+        Backend->>Database: DELETE question by id
+        Database-->>Backend: Confirm deleted
+        Backend-->>Frontend: Return 200 OK
+        Frontend->>Frontend: Close dialog
+        Frontend->>Frontend: Remove question from state
+        Frontend-->>User: Display success toast
+        Frontend-->>User: Navigate to questions list
+    else Cancel Deletion
+        User->>Frontend: Click Cancel
+        Frontend->>Frontend: Close dialog
+        Frontend-->>User: Return to previous state
+    end
+    end
