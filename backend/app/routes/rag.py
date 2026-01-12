@@ -1,4 +1,5 @@
 import os
+import shutil
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 from ..services import RAGService
@@ -24,6 +25,7 @@ def allowed_file(filename):
 
 def is_valid_pdf(file_stream):
     """Check if the file content is actually a PDF by verifying magic bytes."""
+    file_stream.seek(0)  # Ensure we're at the start before reading
     header = file_stream.read(4)
     file_stream.seek(0)  # Reset stream position for later use
     return header == b'%PDF'
@@ -60,10 +62,20 @@ def upload_book():
 
     filepath = os.path.join(Config.BOOKS_FOLDER, filename)
 
-    if os.path.exists(filepath):
+    try:
+        fd = os.open(filepath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
         return jsonify({"error": f"File '{filename}' already exists"}), 409
+    except OSError as e:
+        return jsonify({"error": f"Failed to create file: {e.strerror}"}), 500
 
-    file.save(filepath)
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            file.stream.seek(0)
+            shutil.copyfileobj(file.stream, f)
+    except OSError as e:
+        os.unlink(filepath)
+        return jsonify({"error": f"Failed to save file: {e.strerror}"}), 500
 
     return jsonify({
         "message": "File uploaded successfully",

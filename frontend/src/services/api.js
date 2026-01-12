@@ -17,6 +17,8 @@ async function request(endpoint, options = {}) {
   const config = {
     ...restOptions,
     headers: {
+      // Omit Content-Type for FormData: the browser will automatically set it to
+      // multipart/form-data with the correct boundary parameter for the request
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...optionHeaders,
     },

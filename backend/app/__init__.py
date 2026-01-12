@@ -33,8 +33,9 @@ def create_app():
 
     @app.errorhandler(RequestEntityTooLarge)
     def handle_file_too_large(e):
+        max_size_mb = Config.MAX_UPLOAD_SIZE / (1024 * 1024)
         return jsonify({
-            "error": f"File too large. Maximum size is {Config.MAX_UPLOAD_SIZE // (1024 * 1024)}MB"
+            "error": f"File too large. Maximum size is {max_size_mb:.1f}MB"
         }), 413
 
     # Create tables

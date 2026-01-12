@@ -92,14 +92,33 @@ function HomePage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    if (file.size > MAX_FILE_SIZE) {
+      showToast('File size exceeds 50MB limit', 'error');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
     setIsUploadingBook(true);
 
     try {
       await ragApi.uploadBook(user.id, file);
+    } catch (err) {
+      showToast(`Upload failed: ${err.message}`, 'error');
+      setIsUploadingBook(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    try {
       await ragApi.indexDocuments();
       showToast('Book uploaded and indexed successfully');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(`Book uploaded but indexing failed: ${err.message}. Please try re-indexing from the menu.`, 'error');
     } finally {
       setIsUploadingBook(false);
       if (fileInputRef.current) {
@@ -137,11 +156,11 @@ function HomePage() {
               <h2>Your Questions</h2>
               <div className="section-header-actions">
                 <span className="question-count">{questions.length} questions</span>
-                <button className="add-question-btn" onClick={() => setIsModalOpen(true)}>
+                <button className="add-btn" onClick={() => setIsModalOpen(true)}>
                   + Add Question
                 </button>
                 <button
-                  className="add-question-btn"
+                  className="add-btn"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingBook}
                 >
