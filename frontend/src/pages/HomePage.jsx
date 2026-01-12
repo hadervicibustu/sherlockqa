@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../App';
 import { questionsApi, ragApi } from '../services/api';
 import QuestionList from '../components/Questions/QuestionList';
@@ -16,6 +16,8 @@ function HomePage() {
   const [toast, setToast] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isUploadingBook, setIsUploadingBook] = useState(false);
+  const fileInputRef = useRef(null);
 
   const fetchQuestions = useCallback(async () => {
     try {
@@ -86,6 +88,45 @@ function HomePage() {
     }
   };
 
+  const handleBookUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    if (file.size > MAX_FILE_SIZE) {
+      showToast('File size exceeds 50MB limit', 'error');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    setIsUploadingBook(true);
+
+    try {
+      await ragApi.uploadBook(user.id, file);
+    } catch (err) {
+      showToast(`Upload failed: ${err.message}`, 'error');
+      setIsUploadingBook(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    try {
+      await ragApi.indexDocuments();
+      showToast('Book uploaded and indexed successfully');
+    } catch (err) {
+      showToast(`Book uploaded but indexing failed: ${err.message}. Please try re-indexing from the menu.`, 'error');
+    } finally {
+      setIsUploadingBook(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-container">
@@ -115,9 +156,23 @@ function HomePage() {
               <h2>Your Questions</h2>
               <div className="section-header-actions">
                 <span className="question-count">{questions.length} questions</span>
-                <button className="add-question-btn" onClick={() => setIsModalOpen(true)}>
+                <button className="add-btn" onClick={() => setIsModalOpen(true)}>
                   + Add Question
                 </button>
+                <button
+                  className="add-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingBook}
+                >
+                  {isUploadingBook ? 'Uploading...' : '+ Add Book'}
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".pdf"
+                  style={{ display: 'none' }}
+                  onChange={handleBookUpload}
+                />
               </div>
             </div>
 

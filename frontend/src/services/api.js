@@ -12,10 +12,14 @@ async function request(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
 
   const { headers: optionHeaders, ...restOptions } = options;
+  const isFormData = restOptions.body instanceof FormData;
+
   const config = {
     ...restOptions,
     headers: {
-      'Content-Type': 'application/json',
+      // Omit Content-Type for FormData: the browser will automatically set it to
+      // multipart/form-data with the correct boundary parameter for the request
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...optionHeaders,
     },
   };
@@ -82,6 +86,17 @@ export const questionsApi = {
 
 // RAG API
 export const ragApi = {
+  uploadBook: (userId, file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return request('/rag/upload', {
+      method: 'POST',
+      headers: { 'X-User-ID': userId },
+      body: formData,
+    });
+  },
+
   indexDocuments: () => request('/rag/index', {
     method: 'POST',
   }),

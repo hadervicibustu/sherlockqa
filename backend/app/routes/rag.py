@@ -1,7 +1,86 @@
+import os
+import shutil
 from flask import Blueprint, request, jsonify
+from werkzeug.utils import secure_filename
 from ..services import RAGService
+from ..config import Config
 
 rag_bp = Blueprint("rag", __name__)
+
+ALLOWED_EXTENSIONS = {'.pdf'}
+
+
+def get_user_id_from_request():
+    """Extract user ID from request headers."""
+    user_id = request.headers.get("X-User-ID")
+    if not user_id:
+        return None
+    return user_id
+
+
+def allowed_file(filename):
+    """Check if the file has an allowed extension."""
+    return os.path.splitext(filename.lower())[1] in ALLOWED_EXTENSIONS
+
+
+def is_valid_pdf(file_stream):
+    """Check if the file content is actually a PDF by verifying magic bytes."""
+    file_stream.seek(0)  # Ensure we're at the start before reading
+    header = file_stream.read(4)
+    file_stream.seek(0)  # Reset stream position for later use
+    return header == b'%PDF'
+
+
+@rag_bp.route("/upload", methods=["POST"])
+def upload_book():
+    """Upload a PDF book to the books folder."""
+    user_id = get_user_id_from_request()
+
+    if not user_id:
+        return jsonify({"error": "User ID is required in X-User-ID header"}), 401
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({"error": "Only PDF files are allowed"}), 400
+
+    if not is_valid_pdf(file.stream):
+        return jsonify({"error": "File content is not a valid PDF"}), 400
+
+    filename = secure_filename(file.filename)
+
+    if not filename:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    os.makedirs(Config.BOOKS_FOLDER, exist_ok=True)
+
+    filepath = os.path.join(Config.BOOKS_FOLDER, filename)
+
+    try:
+        fd = os.open(filepath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return jsonify({"error": f"File '{filename}' already exists"}), 409
+    except OSError as e:
+        return jsonify({"error": f"Failed to create file: {e.strerror}"}), 500
+
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            file.stream.seek(0)
+            shutil.copyfileobj(file.stream, f)
+    except OSError as e:
+        os.unlink(filepath)
+        return jsonify({"error": f"Failed to save file: {e.strerror}"}), 500
+
+    return jsonify({
+        "message": "File uploaded successfully",
+        "filename": filename
+    }), 201
 
 
 @rag_bp.route("/index", methods=["POST"])

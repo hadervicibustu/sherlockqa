@@ -43,7 +43,7 @@
   gap: var(--spacing-lg);
 }
 
-.add-question-btn {
+.add-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -58,7 +58,7 @@
   transition: background-color 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
-.add-question-btn:hover {
+.add-btn:hover {
   background-color: var(--color-gold-light);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(201, 162, 39, 0.3);
