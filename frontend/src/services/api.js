@@ -12,10 +12,12 @@ async function request(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
 
   const { headers: optionHeaders, ...restOptions } = options;
+  const isFormData = restOptions.body instanceof FormData;
+
   const config = {
     ...restOptions,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...optionHeaders,
     },
   };
@@ -82,22 +84,15 @@ export const questionsApi = {
 
 // RAG API
 export const ragApi = {
-  uploadBook: async (file) => {
+  uploadBook: (userId, file) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(`${API_BASE_URL}/rag/upload`, {
+    return request('/rag/upload', {
       method: 'POST',
+      headers: { 'X-User-ID': userId },
       body: formData,
     });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new ApiError(data.error || 'Upload failed', response.status);
-    }
-
-    return data;
   },
 
   indexDocuments: () => request('/rag/index', {

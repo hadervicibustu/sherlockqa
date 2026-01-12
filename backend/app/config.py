@@ -27,3 +27,6 @@ class Config:
 
     # Books folder path
     BOOKS_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "books")
+
+    # Upload settings
+    MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB max file size

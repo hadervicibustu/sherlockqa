@@ -9,14 +9,34 @@ rag_bp = Blueprint("rag", __name__)
 ALLOWED_EXTENSIONS = {'.pdf'}
 
 
+def get_user_id_from_request():
+    """Extract user ID from request headers."""
+    user_id = request.headers.get("X-User-ID")
+    if not user_id:
+        return None
+    return user_id
+
+
 def allowed_file(filename):
     """Check if the file has an allowed extension."""
     return os.path.splitext(filename.lower())[1] in ALLOWED_EXTENSIONS
 
 
+def is_valid_pdf(file_stream):
+    """Check if the file content is actually a PDF by verifying magic bytes."""
+    header = file_stream.read(4)
+    file_stream.seek(0)  # Reset stream position for later use
+    return header == b'%PDF'
+
+
 @rag_bp.route("/upload", methods=["POST"])
 def upload_book():
     """Upload a PDF book to the books folder."""
+    user_id = get_user_id_from_request()
+
+    if not user_id:
+        return jsonify({"error": "User ID is required in X-User-ID header"}), 401
+
     if 'file' not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -28,10 +48,15 @@ def upload_book():
     if not allowed_file(file.filename):
         return jsonify({"error": "Only PDF files are allowed"}), 400
 
+    if not is_valid_pdf(file.stream):
+        return jsonify({"error": "File content is not a valid PDF"}), 400
+
     filename = secure_filename(file.filename)
 
-    if not os.path.exists(Config.BOOKS_FOLDER):
-        os.makedirs(Config.BOOKS_FOLDER)
+    if not filename:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    os.makedirs(Config.BOOKS_FOLDER, exist_ok=True)
 
     filepath = os.path.join(Config.BOOKS_FOLDER, filename)
 

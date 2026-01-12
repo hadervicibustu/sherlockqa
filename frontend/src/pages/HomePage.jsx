@@ -95,7 +95,7 @@ function HomePage() {
     setIsUploadingBook(true);
 
     try {
-      await ragApi.uploadBook(file);
+      await ragApi.uploadBook(user.id, file);
       await ragApi.indexDocuments();
       showToast('Book uploaded and indexed successfully');
     } catch (err) {
