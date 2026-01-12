@@ -1,0 +1,112 @@
+flowchart TB
+    subgraph Client["Client Layer"]
+        Browser["Web Browser"]
+        subgraph ReactApp["React Frontend"]
+            Pages["Pages<br/>(LoginPage, HomePage)"]
+            Components["Components<br/>(Header, Modal, Toast,<br/>QuestionList, QuestionForm)"]
+            Context["AuthContext<br/>(Global State)"]
+            APIServices["API Services<br/>(authApi, questionsApi, ragApi)"]
+        end
+    end
+
+    subgraph Server["Server Layer"]
+        subgraph FlaskApp["Flask Backend"]
+            subgraph APILayer["API Layer (Blueprints)"]
+                AuthRoutes["Auth Routes<br/>/api/auth/*"]
+                QuestionRoutes["Question Routes<br/>/api/questions/*"]
+                RAGRoutes["RAG Routes<br/>/api/rag/*"]
+            end
+
+            subgraph ServiceLayer["Service Layer"]
+                AuthService["AuthService"]
+                QuestionService["QuestionService"]
+                RAGService["RAGService"]
+            end
+
+            subgraph UtilityLayer["Utility Layer"]
+                PDFProcessor["PDFProcessor"]
+                EmbeddingModel["EmbeddingModel<br/>(Singleton)"]
+                LLMClient["LLMClient"]
+                Config["Config"]
+            end
+
+            subgraph ModelLayer["Model Layer (ORM)"]
+                UserModel["User Model"]
+                QuestionModel["Question Model"]
+                DocumentModel["Document Model"]
+                ChunkModel["DocumentChunk Model"]
+            end
+        end
+    end
+
+    subgraph DataLayer["Data Layer"]
+        subgraph PostgreSQL["PostgreSQL Database"]
+            UsersTable["users"]
+            QuestionsTable["questions"]
+            DocumentsTable["documents"]
+            ChunksTable["document_chunks<br/>(with pgvector)"]
+        end
+    end
+
+    subgraph ExternalServices["External Services"]
+        ClaudeAPI["Anthropic Claude API<br/>(claude-3-haiku)"]
+        SentenceTransformers["Sentence Transformers<br/>(all-MiniLM-L6-v2)"]
+    end
+
+    subgraph Storage["File Storage"]
+        BooksFolder["Books Folder<br/>(PDF Documents)"]
+    end
+
+    %% Client Layer Connections
+    Browser --> ReactApp
+    Pages --> Components
+    Pages --> Context
+    Pages --> APIServices
+
+    %% Client to Server
+    APIServices -->|"HTTP/REST<br/>JSON"| APILayer
+
+    %% API to Service Layer
+    AuthRoutes --> AuthService
+    QuestionRoutes --> QuestionService
+    RAGRoutes --> RAGService
+
+    %% Service to Utility Layer
+    RAGService --> PDFProcessor
+    RAGService --> EmbeddingModel
+    RAGService --> LLMClient
+    AuthService --> Config
+    QuestionService --> Config
+    RAGService --> Config
+
+    %% Service to Model Layer
+    AuthService --> UserModel
+    QuestionService --> QuestionModel
+    RAGService --> DocumentModel
+    RAGService --> ChunkModel
+
+    %% Model to Database
+    UserModel --> UsersTable
+    QuestionModel --> QuestionsTable
+    DocumentModel --> DocumentsTable
+    ChunkModel --> ChunksTable
+
+    %% External Service Connections
+    LLMClient -->|"HTTPS API"| ClaudeAPI
+    EmbeddingModel -->|"Local ML"| SentenceTransformers
+
+    %% File Storage
+    PDFProcessor -->|"File I/O"| BooksFolder
+
+    %% Styling
+    classDef clientLayer fill:#E3F2FD,stroke:#1976D2
+    classDef serverLayer fill:#E8F5E9,stroke:#388E3C
+    classDef dataLayer fill:#FFF3E0,stroke:#F57C00
+    classDef externalLayer fill:#FCE4EC,stroke:#C2185B
+    classDef storageLayer fill:#F3E5F5,stroke:#7B1FA2
+
+    class Browser,ReactApp,Pages,Components,Context,APIServices clientLayer
+    class FlaskApp,APILayer,ServiceLayer,UtilityLayer,ModelLayer serverLayer
+    class PostgreSQL,UsersTable,QuestionsTable,DocumentsTable,ChunksTable dataLayer
+    class ClaudeAPI,SentenceTransformers externalLayer
+    class BooksFolder storageLayer

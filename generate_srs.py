@@ -1,8 +1,138 @@
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+import re
+
+def create_bookmark_id(title):
+    """Create a valid bookmark ID from a title."""
+    # Remove special characters and replace spaces with underscores
+    bookmark_id = re.sub(r'[^\w\s-]', '', title)
+    bookmark_id = re.sub(r'\s+', '_', bookmark_id)
+    return f"_Ref_{bookmark_id}"
+
+def add_bookmark(paragraph, bookmark_name):
+    """Add a bookmark to a paragraph."""
+    run = paragraph.runs[0] if paragraph.runs else paragraph.add_run()
+    tag = run._r
+
+    # Create bookmark start
+    bookmark_start = OxmlElement('w:bookmarkStart')
+    bookmark_start.set(qn('w:id'), '0')
+    bookmark_start.set(qn('w:name'), bookmark_name)
+
+    # Create bookmark end
+    bookmark_end = OxmlElement('w:bookmarkEnd')
+    bookmark_end.set(qn('w:id'), '0')
+
+    # Insert bookmark
+    tag.insert(0, bookmark_start)
+    tag.append(bookmark_end)
+
+def add_hyperlink(paragraph, text, bookmark_name, font_size=Pt(11), bold=False, indent=0):
+    """Add an internal hyperlink to a bookmark."""
+    # Create the hyperlink element
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('w:anchor'), bookmark_name)
+
+    # Create a new run for the hyperlink text
+    new_run = OxmlElement('w:r')
+
+    # Set run properties
+    rPr = OxmlElement('w:rPr')
+
+    # Add color (blue for links)
+    color = OxmlElement('w:color')
+    color.set(qn('w:val'), '0000FF')
+    rPr.append(color)
+
+    # Add underline
+    u = OxmlElement('w:u')
+    u.set(qn('w:val'), 'single')
+    rPr.append(u)
+
+    # Add font size
+    sz = OxmlElement('w:sz')
+    sz.set(qn('w:val'), str(int(font_size.pt * 2)))
+    rPr.append(sz)
+    szCs = OxmlElement('w:szCs')
+    szCs.set(qn('w:val'), str(int(font_size.pt * 2)))
+    rPr.append(szCs)
+
+    # Add bold if needed
+    if bold:
+        b = OxmlElement('w:b')
+        rPr.append(b)
+
+    new_run.append(rPr)
+
+    # Add text
+    text_elem = OxmlElement('w:t')
+    text_elem.text = text
+    new_run.append(text_elem)
+
+    hyperlink.append(new_run)
+    paragraph._p.append(hyperlink)
+
+    # Set paragraph indentation
+    if indent > 0:
+        paragraph.paragraph_format.left_indent = Inches(indent)
+
+    # Set line spacing
+    paragraph.paragraph_format.space_after = Pt(2)
+    paragraph.paragraph_format.space_before = Pt(2)
+
+def add_heading_with_bookmark(doc, text, level):
+    """Add a heading with a bookmark."""
+    heading = doc.add_heading(text, level=level)
+    bookmark_name = create_bookmark_id(text)
+    add_bookmark(heading, bookmark_name)
+    return heading
+
+def add_external_hyperlink(paragraph, url, text, font_size=Pt(11)):
+    """Add an external hyperlink to a URL."""
+    # Get the document part
+    part = paragraph.part
+    r_id = part.relate_to(url, 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink', is_external=True)
+
+    # Create the hyperlink element
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('r:id'), r_id)
+
+    # Create a new run for the hyperlink text
+    new_run = OxmlElement('w:r')
+
+    # Set run properties
+    rPr = OxmlElement('w:rPr')
+
+    # Add color (blue for links)
+    color = OxmlElement('w:color')
+    color.set(qn('w:val'), '0000FF')
+    rPr.append(color)
+
+    # Add underline
+    u = OxmlElement('w:u')
+    u.set(qn('w:val'), 'single')
+    rPr.append(u)
+
+    # Add font size
+    sz = OxmlElement('w:sz')
+    sz.set(qn('w:val'), str(int(font_size.pt * 2)))
+    rPr.append(sz)
+    szCs = OxmlElement('w:szCs')
+    szCs.set(qn('w:val'), str(int(font_size.pt * 2)))
+    rPr.append(szCs)
+
+    new_run.append(rPr)
+
+    # Add text
+    text_elem = OxmlElement('w:t')
+    text_elem.text = text
+    new_run.append(text_elem)
+
+    hyperlink.append(new_run)
+    paragraph._p.append(hyperlink)
 
 # Create a new Document
 doc = Document()
@@ -14,6 +144,20 @@ title.alignment = WD_ALIGN_PARAGRAPH.CENTER
 # Add subtitle
 subtitle = doc.add_paragraph('Ask Holmes Application')
 subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+# Add GitHub link
+github_para = doc.add_paragraph()
+github_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+github_run = github_para.add_run('GitHub: ')
+github_run.font.size = Pt(11)
+add_external_hyperlink(github_para, 'https://github.com/hadervicibustu/sherlockqa', 'https://github.com/hadervicibustu/sherlockqa', font_size=Pt(11))
+
+# Add Live link
+live_para = doc.add_paragraph()
+live_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+live_run = live_para.add_run('Live: ')
+live_run.font.size = Pt(11)
+add_external_hyperlink(live_para, 'https://sherlockqa-oht2j.ondigitalocean.app/', 'https://sherlockqa-oht2j.ondigitalocean.app/', font_size=Pt(11))
 
 # Add version info
 version = doc.add_paragraph('Version 1.0')
@@ -29,13 +173,174 @@ vAlign = OxmlElement('w:vAlign')
 vAlign.set(qn('w:val'), 'center')
 sectPr.append(vAlign)
 
+# Add page numbers to footer (skip first page/section)
+# Get the second section (content pages)
+second_section = doc.sections[1]
+
+# Unlink footer from previous section so first page has no page number
+second_section.footer.is_linked_to_previous = False
+
+# Add page number to footer
+footer = second_section.footer
+footer_para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+# Create PAGE field for page number
+run = footer_para.add_run()
+fldChar1 = OxmlElement('w:fldChar')
+fldChar1.set(qn('w:fldCharType'), 'begin')
+
+instrText = OxmlElement('w:instrText')
+instrText.set(qn('xml:space'), 'preserve')
+instrText.text = 'PAGE'
+
+fldChar2 = OxmlElement('w:fldChar')
+fldChar2.set(qn('w:fldCharType'), 'separate')
+
+fldChar3 = OxmlElement('w:fldChar')
+fldChar3.set(qn('w:fldCharType'), 'end')
+
+run._r.append(fldChar1)
+run._r.append(instrText)
+run._r.append(fldChar2)
+run._r.append(fldChar3)
+
+# ============================================
+# TABLE OF CONTENTS
+# ============================================
+toc_heading = doc.add_heading('Table of Contents', level=1)
+toc_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+# Define TOC entries: (level, title)
+# Level 1 = main sections, Level 2 = subsections, Level 3 = sub-subsections
+toc_entries = [
+    (1, '1. Introduction'),
+    (2, '1.1 Purpose'),
+    (2, '1.2 Document Conventions'),
+    (2, '1.3 Intended Audience'),
+    (2, '1.4 Product Scope'),
+    (2, '1.5 Product Overview'),
+    (2, '1.6 References'),
+    (2, '1.7 Definitions, Acronyms, and Abbreviations'),
+    (3, '1.7.1 Acronyms'),
+    (3, '1.7.2 Definitions'),
+    (3, '1.7.3 Technical Terms'),
+    (1, '2. Project Requirements'),
+    (2, '2.1 Functional Requirements'),
+    (3, '2.1.1 User Authentication Requirements'),
+    (3, '2.1.2 Question Management Requirements'),
+    (3, '2.1.3 Answer Management Requirements'),
+    (3, '2.1.4 RAG Pipeline Requirements'),
+    (3, '2.1.5 User Interface Requirements'),
+    (3, '2.1.6 Data Management Requirements'),
+    (2, '2.2 Non-Functional Requirements'),
+    (3, '2.2.1 Performance Requirements'),
+    (3, '2.2.2 Security Requirements'),
+    (3, '2.2.3 Reliability Requirements'),
+    (3, '2.2.4 Usability Requirements'),
+    (3, '2.2.5 Accessibility Requirements'),
+    (3, '2.2.6 Maintainability Requirements'),
+    (3, '2.2.7 Scalability Requirements'),
+    (3, '2.2.8 Compatibility Requirements'),
+    (3, '2.2.9 Deployment Requirements'),
+    (1, '3. Use Case Diagram'),
+    (2, '3.1 Actors'),
+    (2, '3.2 Use Cases by Package'),
+    (3, '3.2.1 Authentication Package'),
+    (3, '3.2.2 Question Management Package'),
+    (3, '3.2.3 Answer Management Package'),
+    (3, '3.2.4 RAG Pipeline Package'),
+    (3, '3.2.5 Document Management Package'),
+    (3, '3.2.6 User Interface Package'),
+    (2, '3.3 Relationships Summary'),
+    (2, '3.4 PlantUML Diagram Code'),
+    (1, '4. Activity Diagram - Questions CRUD Operations'),
+    (2, '4.1 Create Question'),
+    (2, '4.2 Read Questions (View List)'),
+    (2, '4.3 Read Question (View Details)'),
+    (2, '4.4 Update Question'),
+    (2, '4.5 Delete Question'),
+    (2, '4.6 PlantUML Diagram Code'),
+    (1, '5. Sequence Diagram - Questions CRUD Operations'),
+    (2, '5.1 Participants'),
+    (2, '5.2 Create Question Sequence'),
+    (2, '5.3 Read Questions (List) Sequence'),
+    (2, '5.4 Read Question (Details) Sequence'),
+    (2, '5.5 Update Question Sequence'),
+    (2, '5.6 Delete Question Sequence'),
+    (2, '5.7 Sequence Diagram'),
+    (1, '6. Class Diagram'),
+    (2, '6.1 Overview'),
+    (2, '6.2 Backend Models'),
+    (2, '6.3 Backend Services'),
+    (2, '6.4 Backend Utilities'),
+    (2, '6.5 Backend API Routes'),
+    (2, '6.6 Frontend Components'),
+    (2, '6.7 Frontend Services and Context'),
+    (2, '6.8 External Systems'),
+    (2, '6.9 Key Relationships'),
+    (2, '6.10 Class Diagram'),
+    (1, '7. Entity Relationship Diagram'),
+    (2, '7.1 Overview'),
+    (2, '7.2 Entities'),
+    (2, '7.3 Relationships'),
+    (2, '7.4 Indexes and Performance'),
+    (2, '7.5 Entity Relationship Diagram'),
+    (1, '8. Design Patterns'),
+    (2, '8.1 Backend Design Patterns'),
+    (2, '8.2 Frontend Design Patterns'),
+    (2, '8.3 Architectural Patterns'),
+    (2, '8.4 Pattern Summary'),
+    (1, '9. Unit Test Cases'),
+    (2, '9.1 Backend Model Tests'),
+    (2, '9.2 Backend Service Tests'),
+    (2, '9.3 Backend Utility Tests'),
+    (2, '9.4 Backend API Route Tests'),
+    (2, '9.5 Frontend Component Tests'),
+    (2, '9.6 Frontend API Service Tests'),
+    (2, '9.7 Test Summary'),
+    (1, '10. Architectural Design'),
+    (2, '10.1 Architecture Overview'),
+    (2, '10.2 Client Layer'),
+    (2, '10.3 Server Layer'),
+    (2, '10.4 Data Layer'),
+    (2, '10.5 External Services'),
+    (2, '10.6 File Storage'),
+    (2, '10.7 Data Flow'),
+    (2, '10.8 Deployment Architecture'),
+    (2, '10.9 Architecture Diagram'),
+    (2, '10.10 Key Architecture Decisions'),
+    (1, '11. Conclusion'),
+    (2, '11.1 Summary'),
+    (2, '11.2 Project Scope Achievement'),
+    (2, '11.3 Future Enhancements'),
+    (2, '11.4 Technical Debt and Recommendations'),
+    (2, '11.5 Final Remarks'),
+]
+
+# Add TOC entries with hyperlinks
+for level, title in toc_entries:
+    toc_para = doc.add_paragraph()
+    bookmark_name = create_bookmark_id(title)
+
+    # Set formatting based on level
+    if level == 1:
+        add_hyperlink(toc_para, title, bookmark_name, font_size=Pt(12), bold=True, indent=0)
+    elif level == 2:
+        add_hyperlink(toc_para, title, bookmark_name, font_size=Pt(11), bold=False, indent=0.25)
+    else:  # level 3
+        add_hyperlink(toc_para, title, bookmark_name, font_size=Pt(10), bold=False, indent=0.5)
+
+# Add page break after TOC
+doc.add_page_break()
+
 # ============================================
 # 1. INTRODUCTION
 # ============================================
-doc.add_heading('1. Introduction', level=1)
+add_heading_with_bookmark(doc, '1. Introduction', level=1)
 
 # 1.1 Purpose
-doc.add_heading('1.1 Purpose', level=2)
+add_heading_with_bookmark(doc, '1.1 Purpose', level=2)
 doc.add_paragraph(
     'This Software Requirements Specification (SRS) document describes the functional and '
     'non-functional requirements for the Ask Holmes application. The purpose of this document '
@@ -45,7 +350,7 @@ doc.add_paragraph(
 )
 
 # 1.2 Document Conventions
-doc.add_heading('1.2 Document Conventions', level=2)
+add_heading_with_bookmark(doc, '1.2 Document Conventions', level=2)
 doc.add_paragraph(
     'This document follows standard SRS conventions. Requirements are identified using unique '
     'identifiers with the following prefixes:'
@@ -55,7 +360,7 @@ doc.add_paragraph('NFR: Non-Functional Requirements', style='List Bullet')
 doc.add_paragraph('UX: User Experience Requirements', style='List Bullet')
 
 # 1.3 Intended Audience
-doc.add_heading('1.3 Intended Audience', level=2)
+add_heading_with_bookmark(doc, '1.3 Intended Audience', level=2)
 doc.add_paragraph('This document is intended for the following audiences:')
 doc.add_paragraph('Developers: To understand the technical requirements and implement the system accordingly.', style='List Bullet')
 doc.add_paragraph('Testers: To develop test cases and validate the system against the specified requirements.', style='List Bullet')
@@ -63,7 +368,7 @@ doc.add_paragraph('Project Managers: To track project progress and ensure requir
 doc.add_paragraph('Stakeholders: To review and approve the system requirements before development begins.', style='List Bullet')
 
 # 1.4 Product Scope
-doc.add_heading('1.4 Product Scope', level=2)
+add_heading_with_bookmark(doc, '1.4 Product Scope', level=2)
 doc.add_paragraph(
     'Ask Holmes is a web-based Retrieval-Augmented Generation (RAG) application that serves as '
     'an intelligent knowledge base for Sherlock Holmes literature. The system enables users to '
@@ -97,7 +402,7 @@ doc.add_paragraph(
 )
 
 # 1.5 Product Overview
-doc.add_heading('1.5 Product Overview', level=2)
+add_heading_with_bookmark(doc, '1.5 Product Overview', level=2)
 doc.add_paragraph(
     'Ask Holmes addresses the need for an intelligent, user-friendly interface to explore and '
     'understand Sherlock Holmes literature. Traditional search methods often fail to provide '
@@ -115,21 +420,21 @@ doc.add_paragraph('Answers are sourced from trusted, indexed Sherlock Holmes boo
 doc.add_paragraph('User data is isolated and secure through authentication', style='List Bullet')
 
 # 1.6 References
-doc.add_heading('1.6 References', level=2)
+add_heading_with_bookmark(doc, '1.6 References', level=2)
 doc.add_paragraph('The following references were used in the development of this SRS:')
 doc.add_paragraph('IEEE Std 830-1998: IEEE Recommended Practice for Software Requirements Specifications', style='List Bullet')
 doc.add_paragraph('Project Scope Document: Ask Holmes Application Scope', style='List Bullet')
 doc.add_paragraph('Technical Architecture Document: System Design and Components', style='List Bullet')
 
 # 1.7 Definitions, Acronyms, and Abbreviations
-doc.add_heading('1.7 Definitions, Acronyms, and Abbreviations', level=2)
+add_heading_with_bookmark(doc, '1.7 Definitions, Acronyms, and Abbreviations', level=2)
 doc.add_paragraph(
     'This section provides definitions for terms, acronyms, and abbreviations used throughout '
     'this document to ensure clarity and consistent understanding.'
 )
 
 # Acronyms subsection
-doc.add_heading('1.7.1 Acronyms', level=3)
+add_heading_with_bookmark(doc, '1.7.1 Acronyms', level=3)
 
 doc.add_paragraph('AI - Artificial Intelligence: The simulation of human intelligence processes by computer systems, including learning, reasoning, and self-correction.')
 doc.add_paragraph('API - Application Programming Interface: A set of protocols and tools that allows different software applications to communicate with each other.')
@@ -175,7 +480,7 @@ doc.add_paragraph('WSGI - Web Server Gateway Interface: A specification for a un
 doc.add_paragraph('XSS - Cross-Site Scripting: A security vulnerability that allows attackers to inject malicious scripts into web pages viewed by other users.')
 
 # Definitions subsection
-doc.add_heading('1.7.2 Definitions', level=3)
+add_heading_with_bookmark(doc, '1.7.2 Definitions', level=3)
 
 doc.add_paragraph('Anthropic: An AI safety company that develops large language models, including the Claude family of AI assistants used in this application.')
 doc.add_paragraph('Authentication: The process of verifying the identity of a user, typically through credentials such as email addresses or passwords.')
@@ -216,7 +521,7 @@ doc.add_paragraph('Vector Database: A database optimized for storing and queryin
 doc.add_paragraph('Viewport: The visible area of a web page in the browser window, which varies based on the device and screen size.')
 
 # Technical Terms subsection
-doc.add_heading('1.7.3 Technical Terms', level=3)
+add_heading_with_bookmark(doc, '1.7.3 Technical Terms', level=3)
 
 doc.add_paragraph('all-MiniLM-L6-v2: A sentence transformer model that produces 384-dimensional embeddings, balancing performance and efficiency.')
 doc.add_paragraph('Connection Pooling: A technique of maintaining a cache of database connections that can be reused for future requests.')
@@ -242,7 +547,7 @@ doc.add_paragraph('Timestamp: A sequence of characters representing the date and
 # ============================================
 # 2. PROJECT REQUIREMENTS
 # ============================================
-doc.add_heading('2. Project Requirements', level=1)
+add_heading_with_bookmark(doc, '2. Project Requirements', level=1)
 doc.add_paragraph(
     'This chapter defines the detailed functional and non-functional requirements for the '
     'Ask Holmes application. Each requirement is assigned a unique identifier for traceability '
@@ -252,14 +557,14 @@ doc.add_paragraph(
 # ============================================
 # 2.1 FUNCTIONAL REQUIREMENTS
 # ============================================
-doc.add_heading('2.1 Functional Requirements', level=2)
+add_heading_with_bookmark(doc, '2.1 Functional Requirements', level=2)
 doc.add_paragraph(
     'Functional requirements describe the specific behaviors, features, and functions that the '
     'Ask Holmes application must provide. These requirements are organized by functional area.'
 )
 
 # 2.1.1 User Authentication Requirements
-doc.add_heading('2.1.1 User Authentication Requirements', level=3)
+add_heading_with_bookmark(doc, '2.1.1 User Authentication Requirements', level=3)
 
 doc.add_paragraph('FR-AUTH-001: User Registration')
 doc.add_paragraph('Description: The system shall allow new users to register by providing a valid email address.', style='List Bullet')
@@ -300,7 +605,7 @@ doc.add_paragraph('4. User can open multiple tabs without re-authenticating', st
 doc.add_paragraph('Priority: Medium', style='List Bullet')
 
 # 2.1.2 Question Management Requirements
-doc.add_heading('2.1.2 Question Management Requirements', level=3)
+add_heading_with_bookmark(doc, '2.1.2 Question Management Requirements', level=3)
 
 doc.add_paragraph('FR-Q-001: Create Question')
 doc.add_paragraph('Description: The system shall allow authenticated users to create new questions through a modal interface.', style='List Bullet')
@@ -364,7 +669,7 @@ doc.add_paragraph('6. Save button disabled when form is invalid', style='List Bu
 doc.add_paragraph('Priority: Medium', style='List Bullet')
 
 # 2.1.3 Answer Management Requirements
-doc.add_heading('2.1.3 Answer Management Requirements', level=3)
+add_heading_with_bookmark(doc, '2.1.3 Answer Management Requirements', level=3)
 
 doc.add_paragraph('FR-A-001: Manual Answer Entry')
 doc.add_paragraph('Description: The system shall allow users to manually enter answers to their questions.', style='List Bullet')
@@ -408,7 +713,7 @@ doc.add_paragraph('4. Saved answers are not affected until user clicks "Save"', 
 doc.add_paragraph('Priority: Low', style='List Bullet')
 
 # 2.1.4 RAG Pipeline Requirements
-doc.add_heading('2.1.4 RAG Pipeline Requirements', level=3)
+add_heading_with_bookmark(doc, '2.1.4 RAG Pipeline Requirements', level=3)
 
 doc.add_paragraph('FR-RAG-001: Document Upload')
 doc.add_paragraph('Description: The system shall allow uploading PDF documents for indexing.', style='List Bullet')
@@ -462,7 +767,7 @@ doc.add_paragraph('4. Deleting document removes all associated chunks', style='L
 doc.add_paragraph('Priority: Low', style='List Bullet')
 
 # 2.1.5 User Interface Requirements
-doc.add_heading('2.1.5 User Interface Requirements', level=3)
+add_heading_with_bookmark(doc, '2.1.5 User Interface Requirements', level=3)
 
 doc.add_paragraph('FR-UI-001: Responsive Layout')
 doc.add_paragraph('Description: The system shall provide a responsive layout for desktop and tablet devices.', style='List Bullet')
@@ -511,7 +816,7 @@ doc.add_paragraph('4. Application does not crash on errors', style='List Bullet'
 doc.add_paragraph('Priority: High', style='List Bullet')
 
 # 2.1.6 Data Management Requirements
-doc.add_heading('2.1.6 Data Management Requirements', level=3)
+add_heading_with_bookmark(doc, '2.1.6 Data Management Requirements', level=3)
 
 doc.add_paragraph('FR-DATA-001: Data Isolation')
 doc.add_paragraph('Description: The system shall ensure users can only access their own data.', style='List Bullet')
@@ -542,7 +847,7 @@ doc.add_paragraph('Priority: Medium', style='List Bullet')
 # ============================================
 # 2.2 NON-FUNCTIONAL REQUIREMENTS
 # ============================================
-doc.add_heading('2.2 Non-Functional Requirements', level=2)
+add_heading_with_bookmark(doc, '2.2 Non-Functional Requirements', level=2)
 doc.add_paragraph(
     'Non-functional requirements define the quality attributes, constraints, and characteristics '
     'that the Ask Holmes application must exhibit. These requirements address performance, '
@@ -550,7 +855,7 @@ doc.add_paragraph(
 )
 
 # 2.2.1 Performance Requirements
-doc.add_heading('2.2.1 Performance Requirements', level=3)
+add_heading_with_bookmark(doc, '2.2.1 Performance Requirements', level=3)
 
 doc.add_paragraph('NFR-PERF-001: API Response Time')
 doc.add_paragraph('Description: The system shall respond to API requests within acceptable time limits.', style='List Bullet')
@@ -583,7 +888,7 @@ doc.add_paragraph('Requirement: Vector similarity search shall complete within 2
 doc.add_paragraph('Priority: Medium', style='List Bullet')
 
 # 2.2.2 Security Requirements
-doc.add_heading('2.2.2 Security Requirements', level=3)
+add_heading_with_bookmark(doc, '2.2.2 Security Requirements', level=3)
 
 doc.add_paragraph('NFR-SEC-001: Data Isolation')
 doc.add_paragraph('Description: The system shall enforce strict data isolation between users.', style='List Bullet')
@@ -622,7 +927,7 @@ doc.add_paragraph('Requirement: Detailed errors shall only be logged server-side
 doc.add_paragraph('Priority: Medium', style='List Bullet')
 
 # 2.2.3 Reliability Requirements
-doc.add_heading('2.2.3 Reliability Requirements', level=3)
+add_heading_with_bookmark(doc, '2.2.3 Reliability Requirements', level=3)
 
 doc.add_paragraph('NFR-REL-001: Data Persistence')
 doc.add_paragraph('Description: The system shall reliably persist all user data.', style='List Bullet')
@@ -649,7 +954,7 @@ doc.add_paragraph('Requirement: Foreign key constraints shall prevent orphaned r
 doc.add_paragraph('Priority: High', style='List Bullet')
 
 # 2.2.4 Usability Requirements
-doc.add_heading('2.2.4 Usability Requirements', level=3)
+add_heading_with_bookmark(doc, '2.2.4 Usability Requirements', level=3)
 
 doc.add_paragraph('NFR-USA-001: Intuitive Interface')
 doc.add_paragraph('Description: The system shall provide an intuitive and easy-to-use interface.', style='List Bullet')
@@ -676,7 +981,7 @@ doc.add_paragraph('Requirement: Error messages shall suggest corrective actions 
 doc.add_paragraph('Priority: Low', style='List Bullet')
 
 # 2.2.5 Accessibility Requirements
-doc.add_heading('2.2.5 Accessibility Requirements', level=3)
+add_heading_with_bookmark(doc, '2.2.5 Accessibility Requirements', level=3)
 
 doc.add_paragraph('NFR-ACC-001: Keyboard Navigation')
 doc.add_paragraph('Description: The system shall support keyboard navigation.', style='List Bullet')
@@ -703,7 +1008,7 @@ doc.add_paragraph('Requirement: Focus state shall not rely on color alone.', sty
 doc.add_paragraph('Priority: Low', style='List Bullet')
 
 # 2.2.6 Maintainability Requirements
-doc.add_heading('2.2.6 Maintainability Requirements', level=3)
+add_heading_with_bookmark(doc, '2.2.6 Maintainability Requirements', level=3)
 
 doc.add_paragraph('NFR-MAINT-001: Code Organization')
 doc.add_paragraph('Description: The system shall follow established code organization patterns.', style='List Bullet')
@@ -724,7 +1029,7 @@ doc.add_paragraph('Requirement: No hardcoded credentials or environment-specific
 doc.add_paragraph('Priority: High', style='List Bullet')
 
 # 2.2.7 Scalability Requirements
-doc.add_heading('2.2.7 Scalability Requirements', level=3)
+add_heading_with_bookmark(doc, '2.2.7 Scalability Requirements', level=3)
 
 doc.add_paragraph('NFR-SCALE-001: Horizontal Scalability')
 doc.add_paragraph('Description: The system shall support horizontal scaling.', style='List Bullet')
@@ -745,7 +1050,7 @@ doc.add_paragraph('Requirement: IVFFlat index shall be used for efficient simila
 doc.add_paragraph('Priority: Low', style='List Bullet')
 
 # 2.2.8 Compatibility Requirements
-doc.add_heading('2.2.8 Compatibility Requirements', level=3)
+add_heading_with_bookmark(doc, '2.2.8 Compatibility Requirements', level=3)
 
 doc.add_paragraph('NFR-COMPAT-001: Browser Compatibility')
 doc.add_paragraph('Description: The system shall support modern web browsers.', style='List Bullet')
@@ -769,7 +1074,7 @@ doc.add_paragraph('Requirement: Graceful message displayed if JavaScript is disa
 doc.add_paragraph('Priority: Low', style='List Bullet')
 
 # 2.2.9 Deployment Requirements
-doc.add_heading('2.2.9 Deployment Requirements', level=3)
+add_heading_with_bookmark(doc, '2.2.9 Deployment Requirements', level=3)
 
 doc.add_paragraph('NFR-DEPLOY-001: Containerization')
 doc.add_paragraph('Description: The system shall support containerized deployment.', style='List Bullet')
@@ -792,7 +1097,7 @@ doc.add_paragraph('Priority: Low', style='List Bullet')
 # ============================================
 # 3. USE CASE DIAGRAM
 # ============================================
-doc.add_heading('3. Use Case Diagram', level=1)
+add_heading_with_bookmark(doc, '3. Use Case Diagram', level=1)
 doc.add_paragraph(
     'This chapter presents the Use Case Diagram for the Ask Holmes application, illustrating '
     'the interactions between actors and the system. The diagram identifies all primary and '
@@ -801,7 +1106,7 @@ doc.add_paragraph(
 )
 
 # 3.1 Actors
-doc.add_heading('3.1 Actors', level=2)
+add_heading_with_bookmark(doc, '3.1 Actors', level=2)
 doc.add_paragraph(
     'The following actors interact with the Ask Holmes application:'
 )
@@ -832,10 +1137,10 @@ doc.add_paragraph('Goals: Convert text to numerical representations for similari
 doc.add_paragraph('Interface: Local Python library', style='List Bullet')
 
 # 3.2 Use Cases by Package
-doc.add_heading('3.2 Use Cases by Package', level=2)
+add_heading_with_bookmark(doc, '3.2 Use Cases by Package', level=2)
 
 # 3.2.1 Authentication Use Cases
-doc.add_heading('3.2.1 Authentication Package', level=3)
+add_heading_with_bookmark(doc, '3.2.1 Authentication Package', level=3)
 
 doc.add_paragraph('UC-AUTH-001: Register Account')
 doc.add_paragraph('Actor: User', style='List Bullet')
@@ -883,7 +1188,7 @@ doc.add_paragraph('Preconditions: User has previously logged in.', style='List B
 doc.add_paragraph('Postconditions: User remains authenticated if session is valid.', style='List Bullet')
 
 # 3.2.2 Question Management Use Cases
-doc.add_heading('3.2.2 Question Management Package', level=3)
+add_heading_with_bookmark(doc, '3.2.2 Question Management Package', level=3)
 
 doc.add_paragraph('UC-Q-001: Create Question')
 doc.add_paragraph('Actor: User', style='List Bullet')
@@ -943,7 +1248,7 @@ doc.add_paragraph('6. System displays success toast', style='List Bullet')
 doc.add_paragraph('Includes: Confirm Deletion, Display Toast Notification', style='List Bullet')
 
 # 3.2.3 Answer Management Use Cases
-doc.add_heading('3.2.3 Answer Management Package', level=3)
+add_heading_with_bookmark(doc, '3.2.3 Answer Management Package', level=3)
 
 doc.add_paragraph('UC-A-001: Enter Manual Answer')
 doc.add_paragraph('Actor: User', style='List Bullet')
@@ -980,7 +1285,7 @@ doc.add_paragraph('Postconditions: New answer replaces previous content in texta
 doc.add_paragraph('Includes: Generate Answer from Documents', style='List Bullet')
 
 # 3.2.4 RAG Pipeline Use Cases
-doc.add_heading('3.2.4 RAG Pipeline Package', level=3)
+add_heading_with_bookmark(doc, '3.2.4 RAG Pipeline Package', level=3)
 
 doc.add_paragraph('UC-RAG-001: Generate Answer from Documents')
 doc.add_paragraph('Actor: System', style='List Bullet')
@@ -1017,7 +1322,7 @@ doc.add_paragraph('Preconditions: Question and context are provided.', style='Li
 doc.add_paragraph('Postconditions: Generated answer is returned.', style='List Bullet')
 
 # 3.2.5 Document Management Use Cases
-doc.add_heading('3.2.5 Document Management Package', level=3)
+add_heading_with_bookmark(doc, '3.2.5 Document Management Package', level=3)
 
 doc.add_paragraph('UC-DOC-001: Upload PDF Document')
 doc.add_paragraph('Actor: Administrator', style='List Bullet')
@@ -1053,7 +1358,7 @@ doc.add_paragraph('Preconditions: Admin is logged in, document exists.', style='
 doc.add_paragraph('Postconditions: Document and all associated chunks are deleted.', style='List Bullet')
 
 # 3.2.6 User Interface Use Cases
-doc.add_heading('3.2.6 User Interface Package', level=3)
+add_heading_with_bookmark(doc, '3.2.6 User Interface Package', level=3)
 
 doc.add_paragraph('UC-UI-001: Open Modal Dialog')
 doc.add_paragraph('Actor: System', style='List Bullet')
@@ -1076,7 +1381,7 @@ doc.add_paragraph('Actor: System', style='List Bullet')
 doc.add_paragraph('Description: Shows error feedback via toast or inline message.', style='List Bullet')
 
 # 3.3 Relationships Summary
-doc.add_heading('3.3 Relationships Summary', level=2)
+add_heading_with_bookmark(doc, '3.3 Relationships Summary', level=2)
 
 doc.add_paragraph('Include Relationships (required behavior):')
 doc.add_paragraph('Register Account includes Validate Email Format, Check Email Availability', style='List Bullet')
@@ -1097,7 +1402,7 @@ doc.add_paragraph('Generalization Relationships (inheritance):')
 doc.add_paragraph('Administrator inherits from User (has all user capabilities plus admin functions)', style='List Bullet')
 
 # 3.4 PlantUML Diagram Code
-doc.add_heading('3.4 PlantUML Diagram Code', level=2)
+add_heading_with_bookmark(doc, '3.4 PlantUML Diagram Code', level=2)
 doc.add_paragraph(
     'The following PlantUML code can be used to generate a visual representation of the '
     'Use Case Diagram. This code can be rendered using PlantUML online editor, VS Code '
@@ -1118,7 +1423,7 @@ fig_run.italic = True
 # ============================================
 # 4. ACTIVITY DIAGRAM - QUESTIONS CRUD
 # ============================================
-doc.add_heading('4. Activity Diagram - Questions CRUD Operations', level=1)
+add_heading_with_bookmark(doc, '4. Activity Diagram - Questions CRUD Operations', level=1)
 
 doc.add_paragraph(
     'This chapter presents the activity diagrams for the basic CRUD (Create, Read, Update, Delete) '
@@ -1127,7 +1432,7 @@ doc.add_paragraph(
 )
 
 # 4.1 Create Question
-doc.add_heading('4.1 Create Question', level=2)
+add_heading_with_bookmark(doc, '4.1 Create Question', level=2)
 
 doc.add_paragraph('Actors: User, System')
 doc.add_paragraph('Precondition: User is authenticated and on the Questions page')
@@ -1151,7 +1456,7 @@ doc.add_paragraph('6b. System highlights invalid fields', style='List Bullet')
 doc.add_paragraph('6c. User corrects input errors and returns to step 5', style='List Bullet')
 
 # 4.2 Read Questions (View List)
-doc.add_heading('4.2 Read Questions (View List)', level=2)
+add_heading_with_bookmark(doc, '4.2 Read Questions (View List)', level=2)
 
 doc.add_paragraph('Actors: User, System')
 doc.add_paragraph('Precondition: User is authenticated')
@@ -1169,7 +1474,7 @@ doc.add_paragraph('4a. System displays empty state message', style='List Bullet'
 doc.add_paragraph('4b. System shows "Create your first question" prompt', style='List Bullet')
 
 # 4.3 Read Question (View Details)
-doc.add_heading('4.3 Read Question (View Details)', level=2)
+add_heading_with_bookmark(doc, '4.3 Read Question (View Details)', level=2)
 
 doc.add_paragraph('Actors: User, System')
 doc.add_paragraph('Precondition: User is on Questions list page')
@@ -1188,7 +1493,7 @@ doc.add_paragraph('6a. System displays empty answer section', style='List Bullet
 doc.add_paragraph('6b. System shows "Enter Answer" and "Ask Holmes" buttons', style='List Bullet')
 
 # 4.4 Update Question
-doc.add_heading('4.4 Update Question', level=2)
+add_heading_with_bookmark(doc, '4.4 Update Question', level=2)
 
 doc.add_paragraph('Actors: User, System')
 doc.add_paragraph('Precondition: User is viewing a question they own')
@@ -1212,7 +1517,7 @@ doc.add_paragraph('6b. System highlights invalid fields', style='List Bullet')
 doc.add_paragraph('6c. User corrects input errors and returns to step 5', style='List Bullet')
 
 # 4.5 Delete Question
-doc.add_heading('4.5 Delete Question', level=2)
+add_heading_with_bookmark(doc, '4.5 Delete Question', level=2)
 
 doc.add_paragraph('Actors: User, System')
 doc.add_paragraph('Precondition: User is viewing a question they own')
@@ -1235,7 +1540,7 @@ doc.add_paragraph('4b. System closes confirmation dialog', style='List Bullet')
 doc.add_paragraph('4c. System returns to previous state', style='List Bullet')
 
 # 4.6 PlantUML Diagram Code
-doc.add_heading('4.6 PlantUML Diagram Code', level=2)
+add_heading_with_bookmark(doc, '4.6 PlantUML Diagram Code', level=2)
 doc.add_paragraph(
     'The following PlantUML code can be used to generate a visual representation of the '
     'Activity Diagram. This code can be rendered using PlantUML online editor, VS Code '
@@ -1256,7 +1561,7 @@ fig_run2.italic = True
 # ============================================
 # 5. SEQUENCE DIAGRAM - QUESTIONS CRUD
 # ============================================
-doc.add_heading('5. Sequence Diagram - Questions CRUD Operations', level=1)
+add_heading_with_bookmark(doc, '5. Sequence Diagram - Questions CRUD Operations', level=1)
 
 doc.add_paragraph(
     'This chapter presents the sequence diagrams for the basic CRUD (Create, Read, Update, Delete) '
@@ -1266,7 +1571,7 @@ doc.add_paragraph(
 )
 
 # 5.1 Participants
-doc.add_heading('5.1 Participants', level=2)
+add_heading_with_bookmark(doc, '5.1 Participants', level=2)
 
 doc.add_paragraph('User: The actor initiating all operations', style='List Bullet')
 doc.add_paragraph('React Frontend: The client-side user interface handling user interactions and state management', style='List Bullet')
@@ -1274,7 +1579,7 @@ doc.add_paragraph('Flask API: The backend server processing requests and busines
 doc.add_paragraph('PostgreSQL: The database storing questions and answers data', style='List Bullet')
 
 # 5.2 Create Question Sequence
-doc.add_heading('5.2 Create Question Sequence', level=2)
+add_heading_with_bookmark(doc, '5.2 Create Question Sequence', level=2)
 
 doc.add_paragraph('1. User clicks New Question button', style='List Number')
 doc.add_paragraph('2. Frontend opens CreateQuestionModal and displays empty form', style='List Number')
@@ -1288,7 +1593,7 @@ doc.add_paragraph('9. Backend returns 201 Created to Frontend', style='List Numb
 doc.add_paragraph('10. Frontend closes modal, updates state, displays success toast', style='List Number')
 
 # 5.3 Read Questions Sequence
-doc.add_heading('5.3 Read Questions (List) Sequence', level=2)
+add_heading_with_bookmark(doc, '5.3 Read Questions (List) Sequence', level=2)
 
 doc.add_paragraph('1. User navigates to Questions page', style='List Number')
 doc.add_paragraph('2. Frontend sends GET /api/questions to Backend', style='List Number')
@@ -1299,7 +1604,7 @@ doc.add_paragraph('6. Backend returns 200 OK with questions list', style='List N
 doc.add_paragraph('7. Frontend renders questions list or empty state', style='List Number')
 
 # 5.4 Read Question Details Sequence
-doc.add_heading('5.4 Read Question (Details) Sequence', level=2)
+add_heading_with_bookmark(doc, '5.4 Read Question (Details) Sequence', level=2)
 
 doc.add_paragraph('1. User clicks on question card', style='List Number')
 doc.add_paragraph('2. Frontend sends GET /api/questions/id to Backend', style='List Number')
@@ -1309,7 +1614,7 @@ doc.add_paragraph('5. Backend returns 200 OK with question and answer data', sty
 doc.add_paragraph('6. Frontend navigates to details page and displays content', style='List Number')
 
 # 5.5 Update Question Sequence
-doc.add_heading('5.5 Update Question Sequence', level=2)
+add_heading_with_bookmark(doc, '5.5 Update Question Sequence', level=2)
 
 doc.add_paragraph('1. User clicks Edit button', style='List Number')
 doc.add_paragraph('2. Frontend opens EditQuestionModal with existing data', style='List Number')
@@ -1322,7 +1627,7 @@ doc.add_paragraph('8. Backend returns 200 OK with updated question', style='List
 doc.add_paragraph('9. Frontend closes modal, updates state, displays success toast', style='List Number')
 
 # 5.6 Delete Question Sequence
-doc.add_heading('5.6 Delete Question Sequence', level=2)
+add_heading_with_bookmark(doc, '5.6 Delete Question Sequence', level=2)
 
 doc.add_paragraph('1. User clicks Delete button', style='List Number')
 doc.add_paragraph('2. Frontend opens confirmation dialog', style='List Number')
@@ -1336,7 +1641,7 @@ doc.add_paragraph('9. Frontend closes dialog, removes from state, displays succe
 doc.add_paragraph('10. Frontend navigates to questions list', style='List Number')
 
 # 5.7 Diagram
-doc.add_heading('5.7 Sequence Diagram', level=2)
+add_heading_with_bookmark(doc, '5.7 Sequence Diagram', level=2)
 
 doc.add_paragraph('File location: diagrams/sequence_diagram_questions_crud.puml')
 
@@ -1348,6 +1653,1668 @@ fig_para3 = doc.add_paragraph()
 fig_para3.alignment = WD_ALIGN_PARAGRAPH.CENTER
 fig_run3 = fig_para3.add_run('Figure 3: Sequence Diagram for Questions CRUD Operations')
 fig_run3.italic = True
+
+# ============================================
+# 6. CLASS DIAGRAM
+# ============================================
+add_heading_with_bookmark(doc, '6. Class Diagram', level=1)
+
+doc.add_paragraph(
+    'This chapter presents a comprehensive class diagram for the Ask Holmes application, '
+    'illustrating the object-oriented structure of both the backend (Python/Flask) and '
+    'frontend (React) components. The diagram shows classes, their attributes, methods, '
+    'and relationships across all layers of the application.'
+)
+
+# 6.1 Overview
+add_heading_with_bookmark(doc, '6.1 Overview', level=2)
+
+doc.add_paragraph(
+    'The Ask Holmes application follows a three-tier architecture with clear separation '
+    'between the presentation layer (React frontend), business logic layer (Flask services), '
+    'and data access layer (SQLAlchemy models with PostgreSQL). The class diagram is organized '
+    'into the following packages:'
+)
+
+doc.add_paragraph('Backend Models: SQLAlchemy ORM entities representing database tables (User, Question, Document, DocumentChunk)', style='List Bullet')
+doc.add_paragraph('Backend Services: Business logic classes handling operations (AuthService, QuestionService, RAGService)', style='List Bullet')
+doc.add_paragraph('Backend Utilities: Helper classes for embeddings, PDF processing, and LLM interaction (Config, EmbeddingModel, PDFProcessor, LLMClient)', style='List Bullet')
+doc.add_paragraph('Backend API Routes: Flask Blueprint route handlers (questions_bp, auth_bp, rag_bp)', style='List Bullet')
+doc.add_paragraph('Frontend Pages: React page components (LoginPage, HomePage)', style='List Bullet')
+doc.add_paragraph('Frontend Components: Reusable React UI components (Header, Modal, Toast, QuestionList, QuestionItem, QuestionForm)', style='List Bullet')
+doc.add_paragraph('Frontend Services: API client modules for backend communication (authApi, questionsApi, ragApi)', style='List Bullet')
+doc.add_paragraph('Frontend Context: React Context for state management (AuthContext, App)', style='List Bullet')
+doc.add_paragraph('External Systems: PostgreSQL database, Claude API, and Sentence Transformers', style='List Bullet')
+
+# 6.2 Backend Models
+add_heading_with_bookmark(doc, '6.2 Backend Models', level=2)
+
+doc.add_paragraph(
+    'The backend model layer consists of four SQLAlchemy ORM classes that map to PostgreSQL '
+    'database tables. All models implement a to_dict() method for JSON serialization.'
+)
+
+doc.add_paragraph('User')
+doc.add_paragraph('Purpose: Represents registered users of the application', style='List Bullet')
+doc.add_paragraph('Attributes: id (UUID, primary key), email (unique, indexed), created_at (timestamp)', style='List Bullet')
+doc.add_paragraph('Relationships: One-to-many with Question (cascade delete)', style='List Bullet')
+
+doc.add_paragraph('Question')
+doc.add_paragraph('Purpose: Stores user questions and their answers', style='List Bullet')
+doc.add_paragraph('Attributes: id (UUID), user_id (foreign key), question (text), answer (text), created_at, updated_at', style='List Bullet')
+doc.add_paragraph('Relationships: Many-to-one with User', style='List Bullet')
+
+doc.add_paragraph('Document')
+doc.add_paragraph('Purpose: Tracks indexed PDF documents in the RAG system', style='List Bullet')
+doc.add_paragraph('Attributes: id (UUID), filename, title, file_hash (unique), indexed_at, chunk_count', style='List Bullet')
+doc.add_paragraph('Relationships: One-to-many with DocumentChunk (cascade delete)', style='List Bullet')
+
+doc.add_paragraph('DocumentChunk')
+doc.add_paragraph('Purpose: Stores vectorized text segments for semantic search', style='List Bullet')
+doc.add_paragraph('Attributes: id (UUID), document_id (foreign key), chunk_text, chunk_index, embedding (384-dim vector), created_at', style='List Bullet')
+doc.add_paragraph('Relationships: Many-to-one with Document', style='List Bullet')
+
+# 6.3 Backend Services
+add_heading_with_bookmark(doc, '6.3 Backend Services', level=2)
+
+doc.add_paragraph(
+    'The service layer implements the business logic and acts as an intermediary between '
+    'the API routes and the data models. Services use static methods to maintain statelessness.'
+)
+
+doc.add_paragraph('AuthService')
+doc.add_paragraph('Purpose: Handles user authentication and registration', style='List Bullet')
+doc.add_paragraph('Key Methods: authenticate_by_email(), get_user_by_id(), create_user()', style='List Bullet')
+
+doc.add_paragraph('QuestionService')
+doc.add_paragraph('Purpose: Manages CRUD operations for user questions', style='List Bullet')
+doc.add_paragraph('Key Methods: get_user_questions(), get_question_by_id(), create_question(), update_question(), delete_question()', style='List Bullet')
+
+doc.add_paragraph('RAGService')
+doc.add_paragraph('Purpose: Orchestrates the Retrieval-Augmented Generation pipeline', style='List Bullet')
+doc.add_paragraph('Dependencies: PDFProcessor, EmbeddingModel, LLMClient', style='List Bullet')
+doc.add_paragraph('Key Methods: index_document(), search_similar_chunks(), generate_answer(), get_indexed_documents(), delete_document()', style='List Bullet')
+
+# 6.4 Backend Utilities
+add_heading_with_bookmark(doc, '6.4 Backend Utilities', level=2)
+
+doc.add_paragraph('Config: Centralized application configuration using environment variables (DATABASE_URL, ANTHROPIC_API_KEY, CHUNK_SIZE=500, CHUNK_OVERLAP=50, TOP_K_RESULTS=3, EMBEDDING_DIMENSION=384)', style='List Bullet')
+doc.add_paragraph('EmbeddingModel (Singleton): Generates 384-dimensional vector embeddings using Sentence Transformers (all-MiniLM-L6-v2 model)', style='List Bullet')
+doc.add_paragraph('PDFProcessor: Extracts text from PDFs, splits into overlapping chunks, calculates file hashes for duplicate detection', style='List Bullet')
+doc.add_paragraph('LLMClient: Interfaces with Anthropic Claude API (claude-3-haiku) for answer generation', style='List Bullet')
+
+# 6.5 Backend API Routes
+add_heading_with_bookmark(doc, '6.5 Backend API Routes', level=2)
+
+doc.add_paragraph('questions_bp: /api/questions - GET (list), GET/<id> (detail), POST (create), PUT/<id> (update), DELETE/<id> (delete)', style='List Bullet')
+doc.add_paragraph('auth_bp: /api/auth - POST /login, POST /register, GET /user/<id>', style='List Bullet')
+doc.add_paragraph('rag_bp: /api/rag - POST /index, POST /query, POST /search, GET /documents, DELETE /documents/<id>', style='List Bullet')
+
+# 6.6 Frontend Components
+add_heading_with_bookmark(doc, '6.6 Frontend Components', level=2)
+
+doc.add_paragraph('Pages:')
+doc.add_paragraph('LoginPage: Authentication entry point with email input, loading states, and error handling', style='List Bullet')
+doc.add_paragraph('HomePage: Main view for managing questions with CRUD operations and RAG integration', style='List Bullet')
+
+doc.add_paragraph('UI Components:')
+doc.add_paragraph('Header: Application header with branding and logout functionality', style='List Bullet')
+doc.add_paragraph('Modal: Reusable dialog wrapper with escape key and backdrop click handling', style='List Bullet')
+doc.add_paragraph('Toast: Temporary notification messages (success/error)', style='List Bullet')
+doc.add_paragraph('QuestionList: Renders list of questions or empty state', style='List Bullet')
+doc.add_paragraph('QuestionItem: Individual question card with actions menu and two-step delete confirmation', style='List Bullet')
+doc.add_paragraph('QuestionForm: Form for creating/editing questions with manual entry and AI generation', style='List Bullet')
+
+# 6.7 Frontend Services and Context
+add_heading_with_bookmark(doc, '6.7 Frontend Services and Context', level=2)
+
+doc.add_paragraph('API Services:')
+doc.add_paragraph('authApi: login(), register(), getUser() - handles authentication requests', style='List Bullet')
+doc.add_paragraph('questionsApi: getAll(), getOne(), create(), update(), delete() - manages question CRUD via HTTP', style='List Bullet')
+doc.add_paragraph('ragApi: indexDocuments(), query(), getDocuments(), deleteDocument(), searchChunks() - RAG operations', style='List Bullet')
+
+doc.add_paragraph('Context:')
+doc.add_paragraph('AuthContext: Global authentication state (user, login, logout) with localStorage persistence', style='List Bullet')
+doc.add_paragraph('App: Root component providing AuthContext, renders LoginPage or HomePage based on auth state', style='List Bullet')
+
+# 6.8 External Systems
+add_heading_with_bookmark(doc, '6.8 External Systems', level=2)
+
+doc.add_paragraph('PostgreSQL Database: Persistent storage with pgvector extension for vector similarity search using IVFFlat indexing', style='List Bullet')
+doc.add_paragraph('Anthropic Claude API: claude-3-haiku model for natural language answer generation', style='List Bullet')
+doc.add_paragraph('Sentence Transformers: all-MiniLM-L6-v2 model for generating 384-dimensional text embeddings', style='List Bullet')
+
+# 6.9 Key Relationships
+add_heading_with_bookmark(doc, '6.9 Key Relationships', level=2)
+
+doc.add_paragraph('Composition (Strong Ownership):')
+doc.add_paragraph('User "1" *-- "0..*" Question (cascade delete)', style='List Bullet')
+doc.add_paragraph('Document "1" *-- "0..*" DocumentChunk (cascade delete)', style='List Bullet')
+
+doc.add_paragraph('Dependencies:')
+doc.add_paragraph('RAGService uses PDFProcessor, EmbeddingModel, and LLMClient', style='List Bullet')
+doc.add_paragraph('Services manage their respective Models', style='List Bullet')
+doc.add_paragraph('Routes delegate to Services', style='List Bullet')
+doc.add_paragraph('Frontend API modules communicate with Backend Routes via HTTP', style='List Bullet')
+doc.add_paragraph('React components use AuthContext for authentication state', style='List Bullet')
+
+# 6.10 Class Diagram
+add_heading_with_bookmark(doc, '6.10 Class Diagram', level=2)
+
+doc.add_paragraph('File location: diagrams/class_diagram.puml')
+
+# Add Class Diagram Image
+doc.add_picture('diagrams/class_diagram.png', width=Inches(6.5))
+
+# Figure Description
+fig_para4 = doc.add_paragraph()
+fig_para4.alignment = WD_ALIGN_PARAGRAPH.CENTER
+fig_run4 = fig_para4.add_run('Figure 4: Class Diagram for Ask Holmes Application')
+fig_run4.italic = True
+
+# ============================================
+# 7. ENTITY RELATIONSHIP DIAGRAM
+# ============================================
+add_heading_with_bookmark(doc, '7. Entity Relationship Diagram', level=1)
+
+doc.add_paragraph(
+    'This chapter presents the Entity Relationship Diagram (ERD) for the Ask Holmes application, '
+    'illustrating the database schema and relationships between entities. The application uses '
+    'PostgreSQL as its relational database management system with the pgvector extension for '
+    'vector similarity search capabilities.'
+)
+
+# 7.1 Overview
+add_heading_with_bookmark(doc, '7.1 Overview', level=2)
+
+doc.add_paragraph(
+    'The database schema consists of four main entities that support the core functionality '
+    'of the Ask Holmes application: user management, question-answer storage, and document '
+    'indexing for the RAG (Retrieval-Augmented Generation) pipeline.'
+)
+
+doc.add_paragraph('The schema follows these design principles:')
+doc.add_paragraph('UUID Primary Keys: All entities use UUID as primary keys for global uniqueness and security', style='List Bullet')
+doc.add_paragraph('Referential Integrity: Foreign key constraints ensure data consistency', style='List Bullet')
+doc.add_paragraph('Cascade Deletion: Child records are automatically deleted when parent records are removed', style='List Bullet')
+doc.add_paragraph('Indexing Strategy: Frequently queried columns are indexed for optimal performance', style='List Bullet')
+doc.add_paragraph('Timestamp Tracking: All entities track creation time; mutable entities track update time', style='List Bullet')
+
+# 7.2 Entities
+add_heading_with_bookmark(doc, '7.2 Entities', level=2)
+
+doc.add_paragraph('USERS')
+doc.add_paragraph('Purpose: Stores registered user accounts for authentication', style='List Bullet')
+doc.add_paragraph('Primary Key: id (UUID, auto-generated)', style='List Bullet')
+doc.add_paragraph('Attributes:', style='List Bullet')
+doc.add_paragraph('  - email: VARCHAR(255), unique, indexed, not null - User email address for login', style='List Bullet')
+doc.add_paragraph('  - created_at: TIMESTAMP, default current timestamp - Account creation time', style='List Bullet')
+doc.add_paragraph('Constraints: Unique constraint on email ensures no duplicate accounts', style='List Bullet')
+
+doc.add_paragraph('QUESTIONS')
+doc.add_paragraph('Purpose: Stores user questions and their associated answers', style='List Bullet')
+doc.add_paragraph('Primary Key: id (UUID, auto-generated)', style='List Bullet')
+doc.add_paragraph('Foreign Key: user_id references USERS(id) with CASCADE delete', style='List Bullet')
+doc.add_paragraph('Attributes:', style='List Bullet')
+doc.add_paragraph('  - user_id: UUID, indexed, not null - Owner of the question', style='List Bullet')
+doc.add_paragraph('  - question: TEXT, not null - The question content', style='List Bullet')
+doc.add_paragraph('  - answer: TEXT, nullable - The answer (manual or AI-generated)', style='List Bullet')
+doc.add_paragraph('  - created_at: TIMESTAMP, indexed, default current timestamp - Question creation time', style='List Bullet')
+doc.add_paragraph('  - updated_at: TIMESTAMP, auto-updated - Last modification time', style='List Bullet')
+doc.add_paragraph('Indexes: user_id and created_at are indexed for efficient filtering and sorting', style='List Bullet')
+
+doc.add_paragraph('DOCUMENTS')
+doc.add_paragraph('Purpose: Tracks PDF documents that have been indexed for RAG search', style='List Bullet')
+doc.add_paragraph('Primary Key: id (UUID, auto-generated)', style='List Bullet')
+doc.add_paragraph('Attributes:', style='List Bullet')
+doc.add_paragraph('  - filename: VARCHAR(255), indexed, not null - Original PDF filename', style='List Bullet')
+doc.add_paragraph('  - title: VARCHAR(500), nullable - Document title (extracted from filename)', style='List Bullet')
+doc.add_paragraph('  - file_hash: VARCHAR(64), unique, not null - SHA-256 hash for duplicate detection', style='List Bullet')
+doc.add_paragraph('  - indexed_at: TIMESTAMP, default current timestamp - When document was indexed', style='List Bullet')
+doc.add_paragraph('  - chunk_count: INTEGER, default 0 - Number of text chunks extracted', style='List Bullet')
+doc.add_paragraph('Constraints: Unique constraint on file_hash prevents duplicate document indexing', style='List Bullet')
+
+doc.add_paragraph('DOCUMENT_CHUNKS')
+doc.add_paragraph('Purpose: Stores vectorized text segments for semantic similarity search', style='List Bullet')
+doc.add_paragraph('Primary Key: id (UUID, auto-generated)', style='List Bullet')
+doc.add_paragraph('Foreign Key: document_id references DOCUMENTS(id) with CASCADE delete', style='List Bullet')
+doc.add_paragraph('Attributes:', style='List Bullet')
+doc.add_paragraph('  - document_id: UUID, indexed, not null - Parent document reference', style='List Bullet')
+doc.add_paragraph('  - chunk_text: TEXT, not null - The text content of the chunk', style='List Bullet')
+doc.add_paragraph('  - chunk_index: INTEGER, not null - Position of chunk within document', style='List Bullet')
+doc.add_paragraph('  - embedding: VECTOR(384), pgvector type - 384-dimensional embedding vector', style='List Bullet')
+doc.add_paragraph('  - created_at: TIMESTAMP, default current timestamp - Chunk creation time', style='List Bullet')
+doc.add_paragraph('Special: Uses pgvector extension with IVFFlat index for efficient similarity search', style='List Bullet')
+
+# 7.3 Relationships
+add_heading_with_bookmark(doc, '7.3 Relationships', level=2)
+
+doc.add_paragraph('USERS to QUESTIONS (One-to-Many)')
+doc.add_paragraph('Cardinality: One user can have zero or more questions', style='List Bullet')
+doc.add_paragraph('Relationship: USERS ||--o{ QUESTIONS', style='List Bullet')
+doc.add_paragraph('Foreign Key: QUESTIONS.user_id references USERS.id', style='List Bullet')
+doc.add_paragraph('On Delete: CASCADE - Deleting a user removes all their questions', style='List Bullet')
+doc.add_paragraph('Business Rule: Questions are isolated per user; users can only access their own questions', style='List Bullet')
+
+doc.add_paragraph('DOCUMENTS to DOCUMENT_CHUNKS (One-to-Many)')
+doc.add_paragraph('Cardinality: One document can have zero or more chunks', style='List Bullet')
+doc.add_paragraph('Relationship: DOCUMENTS ||--o{ DOCUMENT_CHUNKS', style='List Bullet')
+doc.add_paragraph('Foreign Key: DOCUMENT_CHUNKS.document_id references DOCUMENTS.id', style='List Bullet')
+doc.add_paragraph('On Delete: CASCADE - Deleting a document removes all its chunks', style='List Bullet')
+doc.add_paragraph('Business Rule: Chunks are created during indexing; typical document has 50-500 chunks', style='List Bullet')
+
+# 7.4 Indexes and Performance
+add_heading_with_bookmark(doc, '7.4 Indexes and Performance', level=2)
+
+doc.add_paragraph('Standard B-tree Indexes:')
+doc.add_paragraph('USERS.email - For fast login lookups', style='List Bullet')
+doc.add_paragraph('QUESTIONS.user_id - For filtering questions by user', style='List Bullet')
+doc.add_paragraph('QUESTIONS.created_at - For sorting questions by date', style='List Bullet')
+doc.add_paragraph('DOCUMENTS.filename - For document name searches', style='List Bullet')
+doc.add_paragraph('DOCUMENT_CHUNKS.document_id - For retrieving chunks by document', style='List Bullet')
+
+doc.add_paragraph('Vector Index (pgvector):')
+doc.add_paragraph('DOCUMENT_CHUNKS.embedding - IVFFlat index for approximate nearest neighbor search', style='List Bullet')
+doc.add_paragraph('Configuration: Lists parameter tuned for dataset size (typically 100 lists for up to 100K chunks)', style='List Bullet')
+doc.add_paragraph('Search Method: Cosine distance for semantic similarity matching', style='List Bullet')
+
+# 7.5 Entity Relationship Diagram
+add_heading_with_bookmark(doc, '7.5 Entity Relationship Diagram', level=2)
+
+doc.add_paragraph('File location: diagrams/er_diagram.puml')
+
+# Add ER Diagram Image
+doc.add_picture('diagrams/er_diagram.png', width=Inches(6))
+
+# Figure Description
+fig_para5 = doc.add_paragraph()
+fig_para5.alignment = WD_ALIGN_PARAGRAPH.CENTER
+fig_run5 = fig_para5.add_run('Figure 5: Entity Relationship Diagram for Ask Holmes Database')
+fig_run5.italic = True
+
+# ============================================
+# 8. DESIGN PATTERNS
+# ============================================
+add_heading_with_bookmark(doc, '8. Design Patterns', level=1)
+
+doc.add_paragraph(
+    'This chapter documents the software design patterns employed in the Ask Holmes application. '
+    'Design patterns provide proven solutions to common software design problems, improving code '
+    'maintainability, reusability, and scalability. The application utilizes patterns across both '
+    'the backend (Python/Flask) and frontend (React) layers.'
+)
+
+# 8.1 Backend Design Patterns
+add_heading_with_bookmark(doc, '8.1 Backend Design Patterns', level=2)
+
+doc.add_paragraph('8.1.1 Application Factory Pattern')
+doc.add_paragraph('Location: backend/app/__init__.py', style='List Bullet')
+doc.add_paragraph('Implementation: The create_app() function creates and configures the Flask application instance.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Enables multiple app instances with different configurations (testing, development, production)', style='List Bullet')
+doc.add_paragraph('  - Delays extension initialization until app creation time', style='List Bullet')
+doc.add_paragraph('  - Supports blueprint registration for modular architecture', style='List Bullet')
+
+doc.add_paragraph('8.1.2 Singleton Pattern')
+doc.add_paragraph('Location: backend/app/utils/embeddings.py (EmbeddingModel class)', style='List Bullet')
+doc.add_paragraph('Implementation: Uses __new__ method and class-level variables to ensure only one instance of the embedding model is created.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Prevents multiple loading of the ML model into memory', style='List Bullet')
+doc.add_paragraph('  - Reduces memory footprint significantly (model is ~90MB)', style='List Bullet')
+doc.add_paragraph('  - Ensures consistent embedding generation across requests', style='List Bullet')
+
+doc.add_paragraph('8.1.3 Service Layer Pattern')
+doc.add_paragraph('Location: backend/app/services/ (AuthService, QuestionService, RAGService)', style='List Bullet')
+doc.add_paragraph('Implementation: Service classes encapsulate business logic, separating it from route handlers and data models.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Clear separation of concerns between presentation and business logic', style='List Bullet')
+doc.add_paragraph('  - Enables unit testing of business logic in isolation', style='List Bullet')
+doc.add_paragraph('  - Promotes code reuse across different routes', style='List Bullet')
+
+doc.add_paragraph('8.1.4 Repository Pattern')
+doc.add_paragraph('Location: backend/app/services/ (implemented within service classes)', style='List Bullet')
+doc.add_paragraph('Implementation: Services abstract database operations, providing a clean API for data access.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Abstracts data persistence mechanism from business logic', style='List Bullet')
+doc.add_paragraph('  - Simplifies switching between different data sources', style='List Bullet')
+doc.add_paragraph('  - Centralizes query logic for maintainability', style='List Bullet')
+
+doc.add_paragraph('8.1.5 Blueprint Pattern')
+doc.add_paragraph('Location: backend/app/routes/ (auth_bp, questions_bp, rag_bp)', style='List Bullet')
+doc.add_paragraph('Implementation: Flask Blueprints organize routes into modular, reusable components.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Modular organization of related routes', style='List Bullet')
+doc.add_paragraph('  - URL prefix management (/api/auth, /api/questions, /api/rag)', style='List Bullet')
+doc.add_paragraph('  - Enables lazy loading and separate testing of route modules', style='List Bullet')
+
+doc.add_paragraph('8.1.6 Facade Pattern')
+doc.add_paragraph('Location: backend/app/services/rag_service.py (RAGService class)', style='List Bullet')
+doc.add_paragraph('Implementation: RAGService provides a simplified interface to the complex RAG subsystem, coordinating PDFProcessor, EmbeddingModel, and LLMClient.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Hides complexity of multi-step RAG pipeline from clients', style='List Bullet')
+doc.add_paragraph('  - Single entry point for document indexing and answer generation', style='List Bullet')
+doc.add_paragraph('  - Reduces coupling between route handlers and utility classes', style='List Bullet')
+
+doc.add_paragraph('8.1.7 Active Record Pattern')
+doc.add_paragraph('Location: backend/app/models/ (User, Question, Document, DocumentChunk)', style='List Bullet')
+doc.add_paragraph('Implementation: SQLAlchemy ORM models encapsulate both data and database operations.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Objects carry their own persistence logic', style='List Bullet')
+doc.add_paragraph('  - Intuitive API for CRUD operations (model.query, db.session.add)', style='List Bullet')
+doc.add_paragraph('  - Automatic SQL generation and parameterization', style='List Bullet')
+
+doc.add_paragraph('8.1.8 Data Transfer Object (DTO) Pattern')
+doc.add_paragraph('Location: backend/app/models/*.py (to_dict() methods)', style='List Bullet')
+doc.add_paragraph('Implementation: Each model implements to_dict() to convert ORM objects to JSON-serializable dictionaries.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Clean serialization layer for API responses', style='List Bullet')
+doc.add_paragraph('  - Control over which attributes are exposed to clients', style='List Bullet')
+doc.add_paragraph('  - Handles type conversion (UUID to string, datetime to ISO format)', style='List Bullet')
+
+# 8.2 Frontend Design Patterns
+add_heading_with_bookmark(doc, '8.2 Frontend Design Patterns', level=2)
+
+doc.add_paragraph('8.2.1 Provider Pattern')
+doc.add_paragraph('Location: frontend/src/App.jsx (AuthContext.Provider)', style='List Bullet')
+doc.add_paragraph('Implementation: React Context Provider wraps the application to provide global authentication state.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Avoids prop drilling through component hierarchy', style='List Bullet')
+doc.add_paragraph('  - Centralized state management for authentication', style='List Bullet')
+doc.add_paragraph('  - Any component can access auth state via useAuth() hook', style='List Bullet')
+
+doc.add_paragraph('8.2.2 Custom Hook Pattern')
+doc.add_paragraph('Location: frontend/src/App.jsx (useAuth hook)', style='List Bullet')
+doc.add_paragraph('Implementation: Custom hook useAuth() provides access to AuthContext with error handling.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Encapsulates context access logic', style='List Bullet')
+doc.add_paragraph('  - Provides meaningful error if used outside Provider', style='List Bullet')
+doc.add_paragraph('  - Clean, reusable API for components', style='List Bullet')
+
+doc.add_paragraph('8.2.3 Container/Presentational Pattern')
+doc.add_paragraph('Location: frontend/src/pages/ (containers) vs frontend/src/components/ (presentational)', style='List Bullet')
+doc.add_paragraph('Implementation: Page components (HomePage, LoginPage) manage state and logic; UI components (QuestionItem, Toast) focus on presentation.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Separation of concerns between logic and presentation', style='List Bullet')
+doc.add_paragraph('  - Presentational components are easily reusable and testable', style='List Bullet')
+doc.add_paragraph('  - Container components orchestrate data flow', style='List Bullet')
+
+doc.add_paragraph('8.2.4 Composition Pattern')
+doc.add_paragraph('Location: frontend/src/pages/HomePage.jsx', style='List Bullet')
+doc.add_paragraph('Implementation: HomePage composes multiple child components (Header, QuestionList, QuestionForm, Modal, Toast).', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Complex UIs built from simple, focused components', style='List Bullet')
+doc.add_paragraph('  - Each component has single responsibility', style='List Bullet')
+doc.add_paragraph('  - Easy to modify or replace individual components', style='List Bullet')
+
+doc.add_paragraph('8.2.5 Module Pattern')
+doc.add_paragraph('Location: frontend/src/services/api.js', style='List Bullet')
+doc.add_paragraph('Implementation: API clients (authApi, questionsApi, ragApi) exported as module objects with related functions.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Logical grouping of related API calls', style='List Bullet')
+doc.add_paragraph('  - Encapsulation of HTTP request details', style='List Bullet')
+doc.add_paragraph('  - Clean import syntax (import { questionsApi } from "./services/api")', style='List Bullet')
+
+doc.add_paragraph('8.2.6 Observer Pattern')
+doc.add_paragraph('Location: Throughout React components (useState, useEffect)', style='List Bullet')
+doc.add_paragraph('Implementation: React state hooks implement observer pattern - state changes trigger component re-renders.', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Automatic UI updates when state changes', style='List Bullet')
+doc.add_paragraph('  - Declarative data flow', style='List Bullet')
+doc.add_paragraph('  - Side effects managed via useEffect subscriptions', style='List Bullet')
+
+# 8.3 Architectural Patterns
+add_heading_with_bookmark(doc, '8.3 Architectural Patterns', level=2)
+
+doc.add_paragraph('8.3.1 Three-Tier Architecture')
+doc.add_paragraph('Implementation: The application is organized into three distinct layers:', style='List Bullet')
+doc.add_paragraph('  - Presentation Tier: React frontend handles user interface and interactions', style='List Bullet')
+doc.add_paragraph('  - Business Logic Tier: Flask services process requests and implement business rules', style='List Bullet')
+doc.add_paragraph('  - Data Tier: PostgreSQL database stores persistent data', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Independent scaling of each tier', style='List Bullet')
+doc.add_paragraph('  - Technology flexibility (can replace any tier independently)', style='List Bullet')
+doc.add_paragraph('  - Clear separation of responsibilities', style='List Bullet')
+
+doc.add_paragraph('8.3.2 REST API Architecture')
+doc.add_paragraph('Implementation: Backend exposes RESTful HTTP endpoints following standard conventions:', style='List Bullet')
+doc.add_paragraph('  - GET for retrieval, POST for creation, PUT for update, DELETE for removal', style='List Bullet')
+doc.add_paragraph('  - Resource-based URLs (/api/questions, /api/questions/{id})', style='List Bullet')
+doc.add_paragraph('  - Stateless requests with authentication via headers', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Standard, predictable API design', style='List Bullet')
+doc.add_paragraph('  - Easy integration with any HTTP client', style='List Bullet')
+doc.add_paragraph('  - Cacheable responses, scalable architecture', style='List Bullet')
+
+doc.add_paragraph('8.3.3 MVC-like Pattern')
+doc.add_paragraph('Implementation: While not strict MVC, the application follows similar separation:', style='List Bullet')
+doc.add_paragraph('  - Model: SQLAlchemy ORM classes and service layer', style='List Bullet')
+doc.add_paragraph('  - View: React components rendering the UI', style='List Bullet')
+doc.add_paragraph('  - Controller: Flask route handlers coordinating requests/responses', style='List Bullet')
+doc.add_paragraph('Benefits:', style='List Bullet')
+doc.add_paragraph('  - Familiar pattern for developers', style='List Bullet')
+doc.add_paragraph('  - Clear data flow through the application', style='List Bullet')
+doc.add_paragraph('  - Testable components at each layer', style='List Bullet')
+
+# 8.4 Pattern Summary Table
+add_heading_with_bookmark(doc, '8.4 Pattern Summary', level=2)
+
+doc.add_paragraph(
+    'The following table summarizes all design patterns used in the Ask Holmes application:'
+)
+
+# Create a table for pattern summary
+table = doc.add_table(rows=1, cols=4)
+table.style = 'Table Grid'
+
+# Header row
+hdr_cells = table.rows[0].cells
+hdr_cells[0].text = 'Pattern'
+hdr_cells[1].text = 'Category'
+hdr_cells[2].text = 'Layer'
+hdr_cells[3].text = 'Primary Benefit'
+
+# Make header bold
+for cell in hdr_cells:
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            run.bold = True
+
+# Data rows
+patterns = [
+    ('Application Factory', 'Creational', 'Backend', 'Configurable app instances'),
+    ('Singleton', 'Creational', 'Backend', 'Memory-efficient ML model'),
+    ('Service Layer', 'Architectural', 'Backend', 'Separation of concerns'),
+    ('Repository', 'Structural', 'Backend', 'Data access abstraction'),
+    ('Blueprint', 'Structural', 'Backend', 'Modular route organization'),
+    ('Facade', 'Structural', 'Backend', 'Simplified RAG interface'),
+    ('Active Record', 'Architectural', 'Backend', 'ORM data persistence'),
+    ('DTO', 'Structural', 'Backend', 'Clean API serialization'),
+    ('Provider', 'Behavioral', 'Frontend', 'Global state management'),
+    ('Custom Hook', 'Behavioral', 'Frontend', 'Reusable stateful logic'),
+    ('Container/Presentational', 'Structural', 'Frontend', 'UI/logic separation'),
+    ('Composition', 'Structural', 'Frontend', 'Modular UI building'),
+    ('Module', 'Structural', 'Frontend', 'Organized API clients'),
+    ('Observer', 'Behavioral', 'Frontend', 'Reactive UI updates'),
+    ('Three-Tier', 'Architectural', 'Full Stack', 'Scalable architecture'),
+    ('REST API', 'Architectural', 'Full Stack', 'Standard HTTP interface'),
+]
+
+for pattern, category, layer, benefit in patterns:
+    row_cells = table.add_row().cells
+    row_cells[0].text = pattern
+    row_cells[1].text = category
+    row_cells[2].text = layer
+    row_cells[3].text = benefit
+
+# ============================================
+# 9. UNIT TEST CASES
+# ============================================
+add_heading_with_bookmark(doc, '9. Unit Test Cases', level=1)
+
+doc.add_paragraph(
+    'This chapter documents the unit test cases for the Ask Holmes application. '
+    'Unit tests verify that individual components function correctly in isolation. '
+    'The test cases are organized by application layer and component, covering '
+    'models, services, utilities, API routes, and frontend components.'
+)
+
+# 9.1 Backend Model Tests
+add_heading_with_bookmark(doc, '9.1 Backend Model Tests', level=2)
+
+doc.add_paragraph('9.1.1 User Model Tests')
+
+user_table = doc.add_table(rows=1, cols=4)
+user_table.style = 'Table Grid'
+hdr = user_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+user_tests = [
+    ('UM-001', 'Create user with valid email', 'email="test@example.com"', 'User created with UUID, email stored, created_at set'),
+    ('UM-002', 'Create user with duplicate email', 'email="existing@example.com"', 'IntegrityError raised (unique constraint)'),
+    ('UM-003', 'Create user with empty email', 'email=""', 'Validation error or database constraint failure'),
+    ('UM-004', 'User to_dict() serialization', 'Valid User object', 'Dict with id (string), email, created_at (ISO format)'),
+    ('UM-005', 'User-Question relationship', 'User with 3 questions', 'user.questions returns list of 3 Question objects'),
+    ('UM-006', 'Cascade delete user', 'Delete user with questions', 'User and all associated questions deleted'),
+]
+
+for test_id, case, input_val, expected in user_tests:
+    row = user_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.1.2 Question Model Tests')
+
+question_table = doc.add_table(rows=1, cols=4)
+question_table.style = 'Table Grid'
+hdr = question_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+question_tests = [
+    ('QM-001', 'Create question with valid data', 'user_id, question="What is...?"', 'Question created with UUID, timestamps set'),
+    ('QM-002', 'Create question without user_id', 'question="Test?" (no user_id)', 'IntegrityError (foreign key constraint)'),
+    ('QM-003', 'Create question with answer', 'question, answer="The answer..."', 'Question created with answer field populated'),
+    ('QM-004', 'Create question without answer', 'question only', 'Question created with answer=None'),
+    ('QM-005', 'Update question updates timestamp', 'Modify existing question', 'updated_at timestamp changes, created_at unchanged'),
+    ('QM-006', 'Question to_dict() serialization', 'Valid Question object', 'Dict with all fields, UUIDs as strings, dates as ISO'),
+    ('QM-007', 'Question-User backref', 'Question with user_id', 'question.user returns associated User object'),
+]
+
+for test_id, case, input_val, expected in question_tests:
+    row = question_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.1.3 Document Model Tests')
+
+document_table = doc.add_table(rows=1, cols=4)
+document_table.style = 'Table Grid'
+hdr = document_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+document_tests = [
+    ('DM-001', 'Create document with valid data', 'filename, title, file_hash', 'Document created with UUID, indexed_at set'),
+    ('DM-002', 'Create document with duplicate hash', 'Existing file_hash', 'IntegrityError (unique constraint on hash)'),
+    ('DM-003', 'Document chunk_count default', 'Create without chunk_count', 'chunk_count defaults to 0'),
+    ('DM-004', 'Document to_dict() serialization', 'Valid Document object', 'Dict with all fields serialized correctly'),
+    ('DM-005', 'Document-Chunk relationship', 'Document with 5 chunks', 'document.chunks returns list of 5 DocumentChunk objects'),
+    ('DM-006', 'Cascade delete document', 'Delete document with chunks', 'Document and all associated chunks deleted'),
+]
+
+for test_id, case, input_val, expected in document_tests:
+    row = document_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.1.4 DocumentChunk Model Tests')
+
+chunk_table = doc.add_table(rows=1, cols=4)
+chunk_table.style = 'Table Grid'
+hdr = chunk_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+chunk_tests = [
+    ('CM-001', 'Create chunk with valid data', 'document_id, chunk_text, chunk_index', 'Chunk created with UUID, created_at set'),
+    ('CM-002', 'Create chunk with embedding', 'chunk_text, 384-dim vector', 'Chunk created with embedding stored'),
+    ('CM-003', 'Create chunk without document_id', 'chunk_text only', 'IntegrityError (foreign key constraint)'),
+    ('CM-004', 'Chunk to_dict() serialization', 'Valid DocumentChunk', 'Dict with fields (embedding excluded)'),
+    ('CM-005', 'Chunk-Document backref', 'Chunk with document_id', 'chunk.document returns associated Document'),
+    ('CM-006', 'Vector similarity query', 'Query embedding vector', 'Chunks ordered by cosine distance'),
+]
+
+for test_id, case, input_val, expected in chunk_tests:
+    row = chunk_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+# 9.2 Backend Service Tests
+add_heading_with_bookmark(doc, '9.2 Backend Service Tests', level=2)
+
+doc.add_paragraph('9.2.1 AuthService Tests')
+
+auth_table = doc.add_table(rows=1, cols=4)
+auth_table.style = 'Table Grid'
+hdr = auth_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+auth_tests = [
+    ('AS-001', 'Authenticate with valid email', 'Registered user email', '(User object, None) returned'),
+    ('AS-002', 'Authenticate with unregistered email', 'Unknown email', '(None, "User not registered...") returned'),
+    ('AS-003', 'Authenticate with empty email', 'email=""', '(None, "Email is required") returned'),
+    ('AS-004', 'Authenticate with invalid format', 'email="invalid"', '(None, "Invalid email format") returned'),
+    ('AS-005', 'Authenticate normalizes email', 'email="TEST@Example.COM"', 'Email converted to lowercase before lookup'),
+    ('AS-006', 'Get user by valid ID', 'Existing user UUID', 'User object returned'),
+    ('AS-007', 'Get user by invalid ID', 'Non-existent UUID', 'None returned'),
+    ('AS-008', 'Create user with valid email', 'New unique email', '(User object, None) returned'),
+    ('AS-009', 'Create user with existing email', 'Already registered email', '(None, "User already exists") returned'),
+    ('AS-010', 'Create user normalizes email', 'email="NEW@Example.COM"', 'Email stored as lowercase'),
+]
+
+for test_id, case, input_val, expected in auth_tests:
+    row = auth_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.2.2 QuestionService Tests')
+
+qs_table = doc.add_table(rows=1, cols=4)
+qs_table.style = 'Table Grid'
+hdr = qs_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+qs_tests = [
+    ('QS-001', 'Get questions for user with questions', 'user_id with 5 questions', 'List of 5 questions, ordered by created_at desc'),
+    ('QS-002', 'Get questions for user with none', 'user_id with 0 questions', 'Empty list returned'),
+    ('QS-003', 'Get question by ID (owned)', 'question_id, matching user_id', 'Question object returned'),
+    ('QS-004', 'Get question by ID (not owned)', 'question_id, different user_id', 'None returned (ownership check)'),
+    ('QS-005', 'Get question by invalid ID', 'Non-existent question_id', 'None returned'),
+    ('QS-006', 'Create question with text only', 'user_id, question text', '(Question, None) with answer=None'),
+    ('QS-007', 'Create question with answer', 'user_id, question, answer', '(Question, None) with answer populated'),
+    ('QS-008', 'Create question with empty text', 'user_id, question=""', '(None, "Question text is required")'),
+    ('QS-009', 'Update question text', 'question_id, new question text', '(Updated Question, None), updated_at changed'),
+    ('QS-010', 'Update question answer', 'question_id, new answer', '(Updated Question, None), answer updated'),
+    ('QS-011', 'Update non-existent question', 'Invalid question_id', '(None, "Question not found")'),
+    ('QS-012', 'Update question not owned', 'question_id, wrong user_id', '(None, "Question not found")'),
+    ('QS-013', 'Delete existing question', 'Valid question_id, user_id', '(True, None) question removed'),
+    ('QS-014', 'Delete non-existent question', 'Invalid question_id', '(False, "Question not found")'),
+    ('QS-015', 'Delete question not owned', 'question_id, wrong user_id', '(False, "Question not found")'),
+]
+
+for test_id, case, input_val, expected in qs_tests:
+    row = qs_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.2.3 RAGService Tests')
+
+rag_table = doc.add_table(rows=1, cols=4)
+rag_table.style = 'Table Grid'
+hdr = rag_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+rag_tests = [
+    ('RS-001', 'Index valid PDF document', 'Path to valid PDF file', '(Document, None) with chunks created'),
+    ('RS-002', 'Index non-existent PDF', 'Invalid file path', '(None, "PDF file not found...")'),
+    ('RS-003', 'Index duplicate document', 'Already indexed PDF (same hash)', '(None, "Document already indexed...")'),
+    ('RS-004', 'Index all documents (with PDFs)', 'Books folder with 3 PDFs', '(3 successes, 0 failures)'),
+    ('RS-005', 'Index all documents (empty folder)', 'Empty books folder', '(0 successes, 1 failure message)'),
+    ('RS-006', 'Search similar chunks', 'Query string, top_k=3', 'List of 3 most similar DocumentChunks'),
+    ('RS-007', 'Search with no indexed docs', 'Query string, empty database', 'Empty list returned'),
+    ('RS-008', 'Generate answer (docs exist)', 'Question with relevant docs', '(Answer string, None)'),
+    ('RS-009', 'Generate answer (no docs)', 'Question, empty database', '(None, "No relevant documents found...")'),
+    ('RS-010', 'Get indexed documents', 'Database with 5 documents', 'List of 5 Documents, ordered by indexed_at desc'),
+    ('RS-011', 'Delete existing document', 'Valid document_id', '(True, None), document and chunks removed'),
+    ('RS-012', 'Delete non-existent document', 'Invalid document_id', '(False, "Document not found")'),
+]
+
+for test_id, case, input_val, expected in rag_tests:
+    row = rag_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+# 9.3 Backend Utility Tests
+add_heading_with_bookmark(doc, '9.3 Backend Utility Tests', level=2)
+
+doc.add_paragraph('9.3.1 EmbeddingModel Tests')
+
+emb_table = doc.add_table(rows=1, cols=4)
+emb_table.style = 'Table Grid'
+hdr = emb_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+emb_tests = [
+    ('EM-001', 'Singleton pattern enforced', 'Create two instances', 'Both variables reference same instance'),
+    ('EM-002', 'Embed single text', '"Hello world"', 'List of 384 floats returned'),
+    ('EM-003', 'Embed empty string', '""', 'List of 384 floats (zero or near-zero values)'),
+    ('EM-004', 'Embed batch of texts', '["text1", "text2", "text3"]', 'List of 3 embeddings, each 384 floats'),
+    ('EM-005', 'Embed batch empty list', '[]', 'Empty list returned'),
+    ('EM-006', 'Embedding consistency', 'Same text twice', 'Identical embeddings returned'),
+]
+
+for test_id, case, input_val, expected in emb_tests:
+    row = emb_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.3.2 PDFProcessor Tests')
+
+pdf_table = doc.add_table(rows=1, cols=4)
+pdf_table.style = 'Table Grid'
+hdr = pdf_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+pdf_tests = [
+    ('PP-001', 'Extract text from valid PDF', 'Path to text-based PDF', 'String containing PDF text content'),
+    ('PP-002', 'Extract text from empty PDF', 'PDF with no text', 'Empty string returned'),
+    ('PP-003', 'Clean text removes extra whitespace', '"Hello   world\\n\\n"', '"Hello world"'),
+    ('PP-004', 'Chunk text shorter than chunk_size', '100 char text, chunk_size=500', 'List with 1 chunk'),
+    ('PP-005', 'Chunk text creates overlapping chunks', '1500 char text', 'Multiple chunks with overlap at boundaries'),
+    ('PP-006', 'Chunk text respects sentence boundaries', 'Text with sentences', 'Chunks end at periods when possible'),
+    ('PP-007', 'Calculate file hash', 'Valid PDF file', '64-character SHA-256 hex string'),
+    ('PP-008', 'Calculate hash consistency', 'Same file twice', 'Identical hash returned'),
+    ('PP-009', 'Process PDF returns metadata', 'Valid PDF file', 'Dict with filename, title, file_hash, chunks, chunk_count'),
+    ('PP-010', 'Process non-existent PDF', 'Invalid path', 'FileNotFoundError raised'),
+]
+
+for test_id, case, input_val, expected in pdf_tests:
+    row = pdf_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.3.3 LLMClient Tests')
+
+llm_table = doc.add_table(rows=1, cols=4)
+llm_table.style = 'Table Grid'
+hdr = llm_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Input'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+llm_tests = [
+    ('LC-001', 'Generate answer with context', 'Question, list of context chunks', 'Non-empty answer string'),
+    ('LC-002', 'Generate answer empty context', 'Question, empty context list', 'Answer indicating no context available'),
+    ('LC-003', 'API error handling', 'Invalid API key', 'Appropriate exception raised'),
+    ('LC-004', 'Context formatting', 'Multiple context chunks', 'Chunks joined with separator in prompt'),
+    ('LC-005', 'System prompt included', 'Any question', 'Sherlock Holmes expert prompt used'),
+]
+
+for test_id, case, input_val, expected in llm_tests:
+    row = llm_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = input_val
+    row[3].text = expected
+
+# 9.4 Backend API Route Tests
+add_heading_with_bookmark(doc, '9.4 Backend API Route Tests', level=2)
+
+doc.add_paragraph('9.4.1 Authentication Routes (/api/auth)')
+
+auth_route_table = doc.add_table(rows=1, cols=5)
+auth_route_table.style = 'Table Grid'
+hdr = auth_route_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Endpoint'
+hdr[2].text = 'Test Case'
+hdr[3].text = 'Input'
+hdr[4].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+auth_route_tests = [
+    ('AR-001', 'POST /login', 'Login with valid email', '{"email": "user@test.com"}', '200 OK, user object returned'),
+    ('AR-002', 'POST /login', 'Login with unregistered email', '{"email": "unknown@test.com"}', '401 Unauthorized, error message'),
+    ('AR-003', 'POST /login', 'Login with missing email', '{}', '400 Bad Request'),
+    ('AR-004', 'POST /login', 'Login with invalid JSON', 'Invalid JSON body', '400 Bad Request'),
+    ('AR-005', 'POST /register', 'Register new user', '{"email": "new@test.com"}', '201 Created, user object'),
+    ('AR-006', 'POST /register', 'Register existing email', '{"email": "existing@test.com"}', '400 Bad Request, error'),
+    ('AR-007', 'GET /user/<id>', 'Get existing user', 'Valid user UUID', '200 OK, user object'),
+    ('AR-008', 'GET /user/<id>', 'Get non-existent user', 'Invalid UUID', '404 Not Found'),
+]
+
+for test_id, endpoint, case, input_val, expected in auth_route_tests:
+    row = auth_route_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = endpoint
+    row[2].text = case
+    row[3].text = input_val
+    row[4].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.4.2 Questions Routes (/api/questions)')
+
+q_route_table = doc.add_table(rows=1, cols=5)
+q_route_table.style = 'Table Grid'
+hdr = q_route_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Endpoint'
+hdr[2].text = 'Test Case'
+hdr[3].text = 'Input'
+hdr[4].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+q_route_tests = [
+    ('QR-001', 'GET /', 'List questions with header', 'X-User-ID header set', '200 OK, questions array'),
+    ('QR-002', 'GET /', 'List questions no header', 'No X-User-ID header', '401 Unauthorized'),
+    ('QR-003', 'GET /<id>', 'Get owned question', 'Valid question ID, owner', '200 OK, question object'),
+    ('QR-004', 'GET /<id>', 'Get unowned question', 'Valid ID, different user', '404 Not Found'),
+    ('QR-005', 'POST /', 'Create question', '{"question": "What is...?"}', '201 Created, question object'),
+    ('QR-006', 'POST /', 'Create with answer', '{"question": "...", "answer": "..."}', '201 Created'),
+    ('QR-007', 'POST /', 'Create empty question', '{"question": ""}', '400 Bad Request'),
+    ('QR-008', 'POST /', 'Create no body', 'Empty request body', '400 Bad Request'),
+    ('QR-009', 'PUT /<id>', 'Update question text', '{"question": "Updated?"}', '200 OK, updated question'),
+    ('QR-010', 'PUT /<id>', 'Update answer', '{"answer": "New answer"}', '200 OK, updated question'),
+    ('QR-011', 'PUT /<id>', 'Update non-existent', 'Invalid question ID', '400 Bad Request'),
+    ('QR-012', 'DELETE /<id>', 'Delete owned question', 'Valid question ID, owner', '200 OK, success message'),
+    ('QR-013', 'DELETE /<id>', 'Delete unowned question', 'Valid ID, different user', '400 Bad Request'),
+]
+
+for test_id, endpoint, case, input_val, expected in q_route_tests:
+    row = q_route_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = endpoint
+    row[2].text = case
+    row[3].text = input_val
+    row[4].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.4.3 RAG Routes (/api/rag)')
+
+rag_route_table = doc.add_table(rows=1, cols=5)
+rag_route_table.style = 'Table Grid'
+hdr = rag_route_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Endpoint'
+hdr[2].text = 'Test Case'
+hdr[3].text = 'Input'
+hdr[4].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+rag_route_tests = [
+    ('RR-001', 'POST /index', 'Index documents success', 'Books folder with PDFs', '200 OK, successes/failures'),
+    ('RR-002', 'POST /index', 'Index empty folder', 'Empty books folder', '200 OK, failure message'),
+    ('RR-003', 'POST /query', 'Query with question', '{"question": "Who is Holmes?"}', '200 OK, answer string'),
+    ('RR-004', 'POST /query', 'Query empty question', '{"question": ""}', '400 Bad Request'),
+    ('RR-005', 'POST /query', 'Query no documents', 'Empty database', '400 Bad Request, no docs message'),
+    ('RR-006', 'POST /search', 'Search chunks', '{"query": "detective", "top_k": 5}', '200 OK, chunk array'),
+    ('RR-007', 'GET /documents', 'List indexed documents', 'Database with documents', '200 OK, documents array'),
+    ('RR-008', 'GET /documents', 'List empty', 'Empty database', '200 OK, empty array'),
+    ('RR-009', 'DELETE /docs/<id>', 'Delete document', 'Valid document ID', '200 OK, success message'),
+    ('RR-010', 'DELETE /docs/<id>', 'Delete non-existent', 'Invalid document ID', '400 Bad Request'),
+]
+
+for test_id, endpoint, case, input_val, expected in rag_route_tests:
+    row = rag_route_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = endpoint
+    row[2].text = case
+    row[3].text = input_val
+    row[4].text = expected
+
+# 9.5 Frontend Component Tests
+add_heading_with_bookmark(doc, '9.5 Frontend Component Tests', level=2)
+
+doc.add_paragraph('9.5.1 App Component Tests')
+
+app_table = doc.add_table(rows=1, cols=4)
+app_table.style = 'Table Grid'
+hdr = app_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Condition'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+app_tests = [
+    ('FC-001', 'Renders login when not authenticated', 'user = null', 'LoginPage component rendered'),
+    ('FC-002', 'Renders home when authenticated', 'user = {id, email}', 'HomePage component rendered'),
+    ('FC-003', 'Shows loading spinner initially', 'loading = true', 'Spinner element displayed'),
+    ('FC-004', 'Loads user from localStorage', 'Valid user in localStorage', 'User state populated from storage'),
+    ('FC-005', 'Handles invalid localStorage data', 'Invalid JSON in localStorage', 'localStorage cleared, user = null'),
+    ('FC-006', 'Login function updates state', 'Call login(userData)', 'User state set, localStorage updated'),
+    ('FC-007', 'Logout function clears state', 'Call logout()', 'User = null, localStorage cleared'),
+    ('FC-008', 'AuthContext provides value', 'useAuth() in child', 'Returns {user, login, logout}'),
+]
+
+for test_id, case, condition, expected in app_tests:
+    row = app_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = condition
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.5.2 LoginPage Tests')
+
+login_table = doc.add_table(rows=1, cols=4)
+login_table.style = 'Table Grid'
+hdr = login_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Action'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+login_tests = [
+    ('LP-001', 'Renders email input', 'Component mounts', 'Email input field visible'),
+    ('LP-002', 'Renders submit button', 'Component mounts', 'Submit button visible'),
+    ('LP-003', 'Email input updates state', 'Type in email field', 'email state matches input value'),
+    ('LP-004', 'Submit disabled when empty', 'email = ""', 'Submit button disabled'),
+    ('LP-005', 'Submit enabled with email', 'email = "test@test.com"', 'Submit button enabled'),
+    ('LP-006', 'Shows loading on submit', 'Form submitted', 'Loading spinner shown, button disabled'),
+    ('LP-007', 'Calls login on success', 'API returns user', 'login() called with user data'),
+    ('LP-008', 'Shows error on failure', 'API returns error', 'Error message displayed'),
+    ('LP-009', 'Clears error on new submit', 'Submit after error', 'Error message cleared'),
+]
+
+for test_id, case, action, expected in login_tests:
+    row = login_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = action
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.5.3 HomePage Tests')
+
+home_table = doc.add_table(rows=1, cols=4)
+home_table.style = 'Table Grid'
+hdr = home_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Condition'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+home_tests = [
+    ('HP-001', 'Fetches questions on mount', 'Component mounts', 'questionsApi.getAll() called'),
+    ('HP-002', 'Displays loading state', 'loading = true', 'Loading spinner displayed'),
+    ('HP-003', 'Displays error state', 'API fetch fails', 'Error message and retry button'),
+    ('HP-004', 'Renders question list', 'Questions loaded', 'QuestionList with questions prop'),
+    ('HP-005', 'Opens modal on add click', 'Click "Add Question"', 'Modal opens with QuestionForm'),
+    ('HP-006', 'Creates question successfully', 'Submit new question', 'Question added to list, toast shown'),
+    ('HP-007', 'Opens edit modal', 'Click edit on question', 'Modal opens with question data'),
+    ('HP-008', 'Updates question successfully', 'Submit edited question', 'Question updated in list, toast shown'),
+    ('HP-009', 'Deletes question', 'Confirm delete', 'Question removed from list, toast shown'),
+    ('HP-010', 'Ask documents returns answer', 'Click Ask Documents', 'Answer populated in form'),
+]
+
+for test_id, case, condition, expected in home_tests:
+    row = home_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = condition
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.5.4 QuestionForm Tests')
+
+form_table = doc.add_table(rows=1, cols=4)
+form_table.style = 'Table Grid'
+hdr = form_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Test Case'
+hdr[2].text = 'Action'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+form_tests = [
+    ('QF-001', 'Renders empty form for create', 'editingQuestion = null', 'Empty question and answer fields'),
+    ('QF-002', 'Populates form for edit', 'editingQuestion = {...}', 'Fields populated with question data'),
+    ('QF-003', 'Submit disabled when empty', 'question = ""', 'Submit button disabled'),
+    ('QF-004', 'Submit enabled with question', 'question = "Test?"', 'Submit button enabled'),
+    ('QF-005', 'Calls onSubmit for create', 'Submit new question', 'onSubmit(question, answer) called'),
+    ('QF-006', 'Calls onSubmit for edit', 'Submit edited question', 'onSubmit(id, question, answer) called'),
+    ('QF-007', 'Ask Documents button works', 'Click Ask Documents', 'onAskDocuments called, answer populated'),
+    ('QF-008', 'Shows loading during ask', 'Asking documents', 'Spinner shown, button disabled'),
+    ('QF-009', 'Cancel clears form', 'Click cancel', 'onCancelEdit called, form reset'),
+]
+
+for test_id, case, action, expected in form_tests:
+    row = form_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = case
+    row[2].text = action
+    row[3].text = expected
+
+doc.add_paragraph('')
+doc.add_paragraph('9.5.5 Common Component Tests')
+
+common_table = doc.add_table(rows=1, cols=4)
+common_table.style = 'Table Grid'
+hdr = common_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Component'
+hdr[2].text = 'Test Case'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+common_tests = [
+    ('CC-001', 'Header', 'Displays user email', 'User email shown in header'),
+    ('CC-002', 'Header', 'Logout button works', 'logout() called on click'),
+    ('CC-003', 'Modal', 'Not rendered when closed', 'isOpen=false returns null'),
+    ('CC-004', 'Modal', 'Rendered when open', 'isOpen=true shows overlay and content'),
+    ('CC-005', 'Modal', 'Closes on backdrop click', 'onClose called when clicking overlay'),
+    ('CC-006', 'Modal', 'Closes on Escape key', 'onClose called on Escape keypress'),
+    ('CC-007', 'Toast', 'Displays message', 'Message text visible'),
+    ('CC-008', 'Toast', 'Shows success style', 'type="success" applies success class'),
+    ('CC-009', 'Toast', 'Shows error style', 'type="error" applies error class'),
+    ('CC-010', 'QuestionList', 'Renders empty state', 'questions=[] shows empty message'),
+    ('CC-011', 'QuestionList', 'Renders questions', 'questions=[...] renders QuestionItems'),
+    ('CC-012', 'QuestionItem', 'Displays question text', 'Question content visible'),
+    ('CC-013', 'QuestionItem', 'Shows truncated answer', 'Long answer truncated with ellipsis'),
+    ('CC-014', 'QuestionItem', 'Two-step delete', 'First click shows confirm, second deletes'),
+]
+
+for test_id, component, case, expected in common_tests:
+    row = common_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = component
+    row[2].text = case
+    row[3].text = expected
+
+# 9.6 Frontend API Service Tests
+add_heading_with_bookmark(doc, '9.6 Frontend API Service Tests', level=2)
+
+api_table = doc.add_table(rows=1, cols=4)
+api_table.style = 'Table Grid'
+hdr = api_table.rows[0].cells
+hdr[0].text = 'Test ID'
+hdr[1].text = 'Service Method'
+hdr[2].text = 'Test Case'
+hdr[3].text = 'Expected Result'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+api_tests = [
+    ('API-001', 'authApi.login', 'Successful login', 'Returns user object from response'),
+    ('API-002', 'authApi.login', 'Failed login', 'Throws ApiError with message'),
+    ('API-003', 'questionsApi.getAll', 'Fetch questions', 'Returns questions array'),
+    ('API-004', 'questionsApi.getAll', 'Includes X-User-ID header', 'Header sent with request'),
+    ('API-005', 'questionsApi.create', 'Create question', 'Returns created question'),
+    ('API-006', 'questionsApi.update', 'Update question', 'Returns updated question'),
+    ('API-007', 'questionsApi.delete', 'Delete question', 'Returns success response'),
+    ('API-008', 'ragApi.query', 'Query documents', 'Returns answer string'),
+    ('API-009', 'ragApi.indexDocuments', 'Index documents', 'Returns success/failure lists'),
+    ('API-010', 'ApiError', 'Network error', 'ApiError with status 0, "Network error" message'),
+    ('API-011', 'ApiError', 'Server error', 'ApiError with status code and error message'),
+]
+
+for test_id, method, case, expected in api_tests:
+    row = api_table.add_row().cells
+    row[0].text = test_id
+    row[1].text = method
+    row[2].text = case
+    row[3].text = expected
+
+# 9.7 Test Summary
+add_heading_with_bookmark(doc, '9.7 Test Summary', level=2)
+
+doc.add_paragraph(
+    'The following table summarizes the total number of test cases by category:'
+)
+
+summary_table = doc.add_table(rows=1, cols=3)
+summary_table.style = 'Table Grid'
+hdr = summary_table.rows[0].cells
+hdr[0].text = 'Category'
+hdr[1].text = 'Subcategory'
+hdr[2].text = 'Test Count'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+summary_data = [
+    ('Backend Models', 'User, Question, Document, DocumentChunk', '25'),
+    ('Backend Services', 'AuthService, QuestionService, RAGService', '37'),
+    ('Backend Utilities', 'EmbeddingModel, PDFProcessor, LLMClient', '21'),
+    ('Backend API Routes', 'Auth, Questions, RAG endpoints', '31'),
+    ('Frontend Components', 'App, LoginPage, HomePage, QuestionForm, Common', '50'),
+    ('Frontend API Services', 'authApi, questionsApi, ragApi', '11'),
+    ('Total', '', '175'),
+]
+
+for category, subcat, count in summary_data:
+    row = summary_table.add_row().cells
+    row[0].text = category
+    row[1].text = subcat
+    row[2].text = count
+
+# ============================================
+# 10. ARCHITECTURAL DESIGN
+# ============================================
+add_heading_with_bookmark(doc, '10. Architectural Design', level=1)
+
+doc.add_paragraph(
+    'This chapter presents the architectural design of the Ask Holmes application, '
+    'describing the system structure, component organization, and interactions between '
+    'different layers. The architecture follows industry best practices including '
+    'separation of concerns, modularity, and scalability.'
+)
+
+# 10.1 Architecture Overview
+add_heading_with_bookmark(doc, '10.1 Architecture Overview', level=2)
+
+doc.add_paragraph(
+    'The Ask Holmes application implements a modern three-tier web architecture with '
+    'clear separation between the presentation, business logic, and data layers. '
+    'The system is designed as a client-server application where the React frontend '
+    'communicates with the Flask backend through RESTful APIs.'
+)
+
+doc.add_paragraph('Key Architectural Characteristics:')
+doc.add_paragraph('Layered Architecture: Clear separation into Client, Server, and Data layers', style='List Bullet')
+doc.add_paragraph('Microservice-Ready: Modular design allows easy extraction into microservices', style='List Bullet')
+doc.add_paragraph('Stateless Backend: RESTful API design enables horizontal scaling', style='List Bullet')
+doc.add_paragraph('Event-Driven Frontend: React components respond to state changes reactively', style='List Bullet')
+doc.add_paragraph('External Service Integration: Loosely coupled integration with AI services', style='List Bullet')
+
+# 10.2 Client Layer
+add_heading_with_bookmark(doc, '10.2 Client Layer', level=2)
+
+doc.add_paragraph(
+    'The client layer consists of the web browser and the React single-page application (SPA). '
+    'This layer is responsible for rendering the user interface, handling user interactions, '
+    'and managing client-side state.'
+)
+
+doc.add_paragraph('10.2.1 Web Browser')
+doc.add_paragraph('Entry point for end users accessing the application', style='List Bullet')
+doc.add_paragraph('Renders the React application and executes JavaScript', style='List Bullet')
+doc.add_paragraph('Stores authentication state in localStorage for session persistence', style='List Bullet')
+
+doc.add_paragraph('10.2.2 React Frontend Components')
+
+doc.add_paragraph('Pages:')
+doc.add_paragraph('LoginPage: Handles user authentication flow', style='List Bullet')
+doc.add_paragraph('HomePage: Main application interface for question management', style='List Bullet')
+
+doc.add_paragraph('Components:')
+doc.add_paragraph('Header: Application branding and user controls', style='List Bullet')
+doc.add_paragraph('Modal: Reusable dialog container for forms', style='List Bullet')
+doc.add_paragraph('Toast: Notification system for user feedback', style='List Bullet')
+doc.add_paragraph('QuestionList/QuestionItem: Question display and management', style='List Bullet')
+doc.add_paragraph('QuestionForm: Input form for creating/editing questions', style='List Bullet')
+
+doc.add_paragraph('AuthContext:')
+doc.add_paragraph('Global state management using React Context API', style='List Bullet')
+doc.add_paragraph('Provides user authentication state to all components', style='List Bullet')
+doc.add_paragraph('Manages login/logout operations and localStorage sync', style='List Bullet')
+
+doc.add_paragraph('API Services:')
+doc.add_paragraph('authApi: Authentication-related HTTP requests', style='List Bullet')
+doc.add_paragraph('questionsApi: Question CRUD operations', style='List Bullet')
+doc.add_paragraph('ragApi: RAG pipeline operations (indexing, querying)', style='List Bullet')
+
+# 10.3 Server Layer
+add_heading_with_bookmark(doc, '10.3 Server Layer', level=2)
+
+doc.add_paragraph(
+    'The server layer is built with Flask and follows a layered architecture pattern. '
+    'It processes client requests, executes business logic, and manages data persistence.'
+)
+
+doc.add_paragraph('10.3.1 API Layer (Blueprints)')
+doc.add_paragraph('Purpose: HTTP request handling, routing, and response formatting', style='List Bullet')
+doc.add_paragraph('Implementation: Flask Blueprints for modular route organization', style='List Bullet')
+doc.add_paragraph('Components:', style='List Bullet')
+doc.add_paragraph('  - Auth Routes (/api/auth/*): Login, registration, user retrieval', style='List Bullet')
+doc.add_paragraph('  - Question Routes (/api/questions/*): CRUD operations for questions', style='List Bullet')
+doc.add_paragraph('  - RAG Routes (/api/rag/*): Document indexing and answer generation', style='List Bullet')
+doc.add_paragraph('Responsibilities:', style='List Bullet')
+doc.add_paragraph('  - Request validation and parsing', style='List Bullet')
+doc.add_paragraph('  - Authentication header extraction (X-User-ID)', style='List Bullet')
+doc.add_paragraph('  - Response formatting (JSON)', style='List Bullet')
+doc.add_paragraph('  - HTTP status code management', style='List Bullet')
+
+doc.add_paragraph('10.3.2 Service Layer')
+doc.add_paragraph('Purpose: Business logic encapsulation and orchestration', style='List Bullet')
+doc.add_paragraph('Implementation: Python classes with static methods', style='List Bullet')
+doc.add_paragraph('Components:', style='List Bullet')
+doc.add_paragraph('  - AuthService: User authentication and registration logic', style='List Bullet')
+doc.add_paragraph('  - QuestionService: Question management business rules', style='List Bullet')
+doc.add_paragraph('  - RAGService: RAG pipeline orchestration (Facade pattern)', style='List Bullet')
+doc.add_paragraph('Responsibilities:', style='List Bullet')
+doc.add_paragraph('  - Business rule enforcement', style='List Bullet')
+doc.add_paragraph('  - Data validation beyond basic input checks', style='List Bullet')
+doc.add_paragraph('  - Coordination between utilities and models', style='List Bullet')
+doc.add_paragraph('  - Transaction management', style='List Bullet')
+
+doc.add_paragraph('10.3.3 Utility Layer')
+doc.add_paragraph('Purpose: Specialized functionality and external integrations', style='List Bullet')
+doc.add_paragraph('Components:', style='List Bullet')
+doc.add_paragraph('  - PDFProcessor: PDF text extraction and chunking', style='List Bullet')
+doc.add_paragraph('  - EmbeddingModel (Singleton): Vector embedding generation', style='List Bullet')
+doc.add_paragraph('  - LLMClient: Anthropic Claude API integration', style='List Bullet')
+doc.add_paragraph('  - Config: Centralized configuration management', style='List Bullet')
+doc.add_paragraph('Design Decisions:', style='List Bullet')
+doc.add_paragraph('  - Singleton pattern for EmbeddingModel to conserve memory', style='List Bullet')
+doc.add_paragraph('  - Environment-based configuration for deployment flexibility', style='List Bullet')
+doc.add_paragraph('  - Abstracted external service calls for testability', style='List Bullet')
+
+doc.add_paragraph('10.3.4 Model Layer (ORM)')
+doc.add_paragraph('Purpose: Data representation and persistence abstraction', style='List Bullet')
+doc.add_paragraph('Implementation: SQLAlchemy ORM with Flask-SQLAlchemy', style='List Bullet')
+doc.add_paragraph('Components:', style='List Bullet')
+doc.add_paragraph('  - User Model: User account data', style='List Bullet')
+doc.add_paragraph('  - Question Model: Question and answer storage', style='List Bullet')
+doc.add_paragraph('  - Document Model: Indexed PDF metadata', style='List Bullet')
+doc.add_paragraph('  - DocumentChunk Model: Vectorized text segments', style='List Bullet')
+doc.add_paragraph('Features:', style='List Bullet')
+doc.add_paragraph('  - Automatic schema generation', style='List Bullet')
+doc.add_paragraph('  - Relationship mapping (one-to-many)', style='List Bullet')
+doc.add_paragraph('  - Cascade delete for referential integrity', style='List Bullet')
+doc.add_paragraph('  - JSON serialization via to_dict() methods', style='List Bullet')
+
+# 10.4 Data Layer
+add_heading_with_bookmark(doc, '10.4 Data Layer', level=2)
+
+doc.add_paragraph(
+    'The data layer uses PostgreSQL as the relational database management system, '
+    'extended with pgvector for vector similarity search capabilities.'
+)
+
+doc.add_paragraph('10.4.1 PostgreSQL Database')
+doc.add_paragraph('Purpose: Persistent data storage with ACID compliance', style='List Bullet')
+doc.add_paragraph('Tables:', style='List Bullet')
+doc.add_paragraph('  - users: User account information', style='List Bullet')
+doc.add_paragraph('  - questions: User questions and answers', style='List Bullet')
+doc.add_paragraph('  - documents: Indexed PDF metadata', style='List Bullet')
+doc.add_paragraph('  - document_chunks: Text chunks with vector embeddings', style='List Bullet')
+
+doc.add_paragraph('10.4.2 pgvector Extension')
+doc.add_paragraph('Purpose: Vector similarity search for semantic retrieval', style='List Bullet')
+doc.add_paragraph('Features:', style='List Bullet')
+doc.add_paragraph('  - VECTOR data type for storing 384-dimensional embeddings', style='List Bullet')
+doc.add_paragraph('  - Cosine distance operator for similarity measurement', style='List Bullet')
+doc.add_paragraph('  - IVFFlat index for approximate nearest neighbor search', style='List Bullet')
+doc.add_paragraph('Performance:', style='List Bullet')
+doc.add_paragraph('  - Sub-millisecond query times for typical workloads', style='List Bullet')
+doc.add_paragraph('  - Scalable to millions of vectors with proper indexing', style='List Bullet')
+
+# 10.5 External Services
+add_heading_with_bookmark(doc, '10.5 External Services', level=2)
+
+doc.add_paragraph(
+    'The application integrates with external AI services for natural language processing '
+    'and embedding generation.'
+)
+
+doc.add_paragraph('10.5.1 Anthropic Claude API')
+doc.add_paragraph('Purpose: Natural language answer generation', style='List Bullet')
+doc.add_paragraph('Model: claude-3-haiku-20240307 (optimized for speed and cost)', style='List Bullet')
+doc.add_paragraph('Integration:', style='List Bullet')
+doc.add_paragraph('  - HTTPS REST API calls via anthropic Python SDK', style='List Bullet')
+doc.add_paragraph('  - System prompt configured for Sherlock Holmes domain expertise', style='List Bullet')
+doc.add_paragraph('  - Context-aware responses using retrieved document chunks', style='List Bullet')
+doc.add_paragraph('Configuration:', style='List Bullet')
+doc.add_paragraph('  - API key stored in environment variable (ANTHROPIC_API_KEY)', style='List Bullet')
+doc.add_paragraph('  - Max tokens: 1024 per response', style='List Bullet')
+
+doc.add_paragraph('10.5.2 Sentence Transformers')
+doc.add_paragraph('Purpose: Text embedding generation for semantic search', style='List Bullet')
+doc.add_paragraph('Model: all-MiniLM-L6-v2', style='List Bullet')
+doc.add_paragraph('Characteristics:', style='List Bullet')
+doc.add_paragraph('  - 384-dimensional output vectors', style='List Bullet')
+doc.add_paragraph('  - Local execution (no external API calls)', style='List Bullet')
+doc.add_paragraph('  - ~90MB model size, loaded once via Singleton pattern', style='List Bullet')
+doc.add_paragraph('Performance:', style='List Bullet')
+doc.add_paragraph('  - Fast inference suitable for real-time applications', style='List Bullet')
+doc.add_paragraph('  - Batch processing support for document indexing', style='List Bullet')
+
+# 10.6 File Storage
+add_heading_with_bookmark(doc, '10.6 File Storage', level=2)
+
+doc.add_paragraph('10.6.1 Books Folder')
+doc.add_paragraph('Purpose: Storage location for PDF documents to be indexed', style='List Bullet')
+doc.add_paragraph('Location: backend/books/', style='List Bullet')
+doc.add_paragraph('Operations:', style='List Bullet')
+doc.add_paragraph('  - Read: PDFProcessor extracts text from PDF files', style='List Bullet')
+doc.add_paragraph('  - Scan: RAGService scans folder for new documents during indexing', style='List Bullet')
+doc.add_paragraph('Security:', style='List Bullet')
+doc.add_paragraph('  - Files accessed only by backend service', style='List Bullet')
+doc.add_paragraph('  - SHA-256 hash verification prevents duplicate indexing', style='List Bullet')
+
+# 10.7 Data Flow
+add_heading_with_bookmark(doc, '10.7 Data Flow', level=2)
+
+doc.add_paragraph('10.7.1 Authentication Flow')
+doc.add_paragraph('1. User enters email in LoginPage', style='List Bullet')
+doc.add_paragraph('2. authApi.login() sends POST request to /api/auth/login', style='List Bullet')
+doc.add_paragraph('3. Auth Routes extract email from request body', style='List Bullet')
+doc.add_paragraph('4. AuthService.authenticate_by_email() validates and retrieves user', style='List Bullet')
+doc.add_paragraph('5. User Model queries PostgreSQL users table', style='List Bullet')
+doc.add_paragraph('6. Response flows back through layers to client', style='List Bullet')
+doc.add_paragraph('7. AuthContext stores user state and updates localStorage', style='List Bullet')
+
+doc.add_paragraph('10.7.2 Question Creation Flow')
+doc.add_paragraph('1. User fills QuestionForm and clicks Save', style='List Bullet')
+doc.add_paragraph('2. questionsApi.create() sends POST to /api/questions', style='List Bullet')
+doc.add_paragraph('3. Question Routes validate X-User-ID header and request body', style='List Bullet')
+doc.add_paragraph('4. QuestionService.create_question() creates new Question object', style='List Bullet')
+doc.add_paragraph('5. Question Model persists to PostgreSQL questions table', style='List Bullet')
+doc.add_paragraph('6. Response returns created question to client', style='List Bullet')
+doc.add_paragraph('7. HomePage updates state, Toast displays success message', style='List Bullet')
+
+doc.add_paragraph('10.7.3 RAG Answer Generation Flow')
+doc.add_paragraph('1. User clicks "Ask Documents" in QuestionForm', style='List Bullet')
+doc.add_paragraph('2. ragApi.query() sends POST to /api/rag/query', style='List Bullet')
+doc.add_paragraph('3. RAG Routes forward to RAGService.generate_answer()', style='List Bullet')
+doc.add_paragraph('4. EmbeddingModel generates query vector (384 dimensions)', style='List Bullet')
+doc.add_paragraph('5. DocumentChunk Model performs pgvector similarity search', style='List Bullet')
+doc.add_paragraph('6. Top-K relevant chunks retrieved from database', style='List Bullet')
+doc.add_paragraph('7. LLMClient sends question + context to Claude API', style='List Bullet')
+doc.add_paragraph('8. Generated answer returns through layers to client', style='List Bullet')
+doc.add_paragraph('9. QuestionForm populates answer field with response', style='List Bullet')
+
+# 10.8 Deployment Architecture
+add_heading_with_bookmark(doc, '10.8 Deployment Architecture', level=2)
+
+doc.add_paragraph('10.8.1 Development Environment')
+doc.add_paragraph('Frontend: Vite development server (port 5173)', style='List Bullet')
+doc.add_paragraph('Backend: Flask development server (port 5000)', style='List Bullet')
+doc.add_paragraph('Database: Local PostgreSQL instance', style='List Bullet')
+doc.add_paragraph('Proxy: Vite proxies /api requests to Flask backend', style='List Bullet')
+
+doc.add_paragraph('10.8.2 Production Environment (Docker)')
+doc.add_paragraph('Frontend: Nginx serving static React build', style='List Bullet')
+doc.add_paragraph('Backend: Gunicorn WSGI server running Flask', style='List Bullet')
+doc.add_paragraph('Database: PostgreSQL container with pgvector', style='List Bullet')
+doc.add_paragraph('Orchestration: Docker Compose for multi-container management', style='List Bullet')
+doc.add_paragraph('Networking: Internal Docker network for service communication', style='List Bullet')
+
+# 10.9 Architecture Diagram
+add_heading_with_bookmark(doc, '10.9 Architecture Diagram', level=2)
+
+doc.add_paragraph('File location: diagrams/architecture_diagram.puml')
+
+# Add Architecture Diagram Image
+doc.add_picture('diagrams/architecture_diagram.png', width=Inches(6.5))
+
+# Figure Description
+fig_para6 = doc.add_paragraph()
+fig_para6.alignment = WD_ALIGN_PARAGRAPH.CENTER
+fig_run6 = fig_para6.add_run('Figure 6: System Architecture Diagram for Ask Holmes Application')
+fig_run6.italic = True
+
+# 10.10 Architecture Decisions
+add_heading_with_bookmark(doc, '10.10 Key Architecture Decisions', level=2)
+
+arch_decision_table = doc.add_table(rows=1, cols=3)
+arch_decision_table.style = 'Table Grid'
+hdr = arch_decision_table.rows[0].cells
+hdr[0].text = 'Decision'
+hdr[1].text = 'Rationale'
+hdr[2].text = 'Trade-offs'
+for cell in hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+decisions = [
+    ('React SPA Frontend', 'Rich interactivity, component reusability, large ecosystem', 'Initial load time, SEO challenges (mitigated for internal app)'),
+    ('Flask Backend', 'Lightweight, Python ecosystem for ML/AI, rapid development', 'Less suited for high-concurrency (mitigated with Gunicorn)'),
+    ('PostgreSQL + pgvector', 'ACID compliance, vector search in single database, mature ecosystem', 'Requires PostgreSQL-specific deployment'),
+    ('Local Embedding Model', 'No API costs, low latency, data privacy', 'Memory usage (~90MB), CPU-bound processing'),
+    ('Claude API for LLM', 'High-quality responses, managed service, cost-effective', 'External dependency, API rate limits, network latency'),
+    ('REST API Design', 'Stateless, cacheable, widely understood', 'Multiple requests for complex operations'),
+    ('Service Layer Pattern', 'Testability, separation of concerns, reusability', 'Additional abstraction layer'),
+    ('Docker Deployment', 'Consistent environments, easy scaling, isolation', 'Container orchestration complexity'),
+]
+
+for decision, rationale, tradeoffs in decisions:
+    row = arch_decision_table.add_row().cells
+    row[0].text = decision
+    row[1].text = rationale
+    row[2].text = tradeoffs
+
+# ============================================
+# 11. CONCLUSION
+# ============================================
+add_heading_with_bookmark(doc, '11. Conclusion', level=1)
+
+# 11.1 Summary
+add_heading_with_bookmark(doc, '11.1 Summary', level=2)
+doc.add_paragraph(
+    'This Software Requirements Specification document has provided a comprehensive overview of the '
+    'Ask Holmes application, a Retrieval-Augmented Generation (RAG) system designed to serve as an '
+    'intelligent knowledge base for Sherlock Holmes literature. The document has covered all aspects '
+    'of the system from functional and non-functional requirements to detailed architectural design '
+    'and implementation specifications.'
+)
+
+doc.add_paragraph('Key highlights of this specification include:')
+doc.add_paragraph(
+    'Comprehensive Requirements: The document defines 45+ functional requirements covering user '
+    'authentication, question management, answer generation, RAG pipeline operations, and document '
+    'management capabilities.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Robust Architecture: A three-tier architecture (Client, Server, Data) with clear separation '
+    'of concerns, leveraging React for the frontend, Flask for the backend, and PostgreSQL with '
+    'pgvector for semantic search capabilities.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'AI-Powered Features: Integration of state-of-the-art AI technologies including Sentence '
+    'Transformers for embedding generation and Anthropic Claude API for natural language response '
+    'generation.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Quality Assurance: Comprehensive unit test cases covering all layers of the application, '
+    'ensuring reliability and maintainability of the codebase.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Scalable Design: Docker-based deployment architecture enabling consistent environments '
+    'and easy horizontal scaling.',
+    style='List Bullet'
+)
+
+# 11.2 Project Scope Achievement
+add_heading_with_bookmark(doc, '11.2 Project Scope Achievement', level=2)
+doc.add_paragraph(
+    'The Ask Holmes application successfully addresses the core objectives outlined in the project scope:'
+)
+
+scope_table = doc.add_table(rows=1, cols=3)
+scope_table.style = 'Table Grid'
+scope_hdr = scope_table.rows[0].cells
+scope_hdr[0].text = 'Objective'
+scope_hdr[1].text = 'Implementation'
+scope_hdr[2].text = 'Status'
+for cell in scope_hdr:
+    for p in cell.paragraphs:
+        for r in p.runs:
+            r.bold = True
+
+scope_items = [
+    ('Question Management', 'Full CRUD operations with user isolation', 'Achieved'),
+    ('AI-Powered Answers', 'RAG pipeline with semantic search and LLM generation', 'Achieved'),
+    ('Trusted Sources', 'Document indexing with source attribution', 'Achieved'),
+    ('User Authentication', 'Email-based authentication with session management', 'Achieved'),
+    ('Responsive UI', 'React-based SPA with modern component architecture', 'Achieved'),
+    ('Data Persistence', 'PostgreSQL database with pgvector extension', 'Achieved'),
+    ('Containerized Deployment', 'Docker Compose multi-container setup', 'Achieved'),
+]
+
+for objective, implementation, status in scope_items:
+    row = scope_table.add_row().cells
+    row[0].text = objective
+    row[1].text = implementation
+    row[2].text = status
+
+# 11.3 Future Enhancements
+add_heading_with_bookmark(doc, '11.3 Future Enhancements', level=2)
+doc.add_paragraph(
+    'While the current implementation fulfills all specified requirements, the following '
+    'enhancements could be considered for future versions:'
+)
+
+doc.add_paragraph(
+    'Advanced Authentication: Implementation of OAuth 2.0, multi-factor authentication, '
+    'and password-based login for enhanced security.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Extended Document Support: Support for additional document formats (EPUB, TXT, HTML) '
+    'and multi-language content indexing.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Enhanced RAG Capabilities: Implementation of hybrid search (combining keyword and semantic), '
+    'query rewriting, and multi-hop reasoning for complex questions.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Analytics Dashboard: User analytics, question trends, and system usage metrics '
+    'for administrators.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Collaborative Features: Shared question collections, user annotations, and '
+    'collaborative knowledge building.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Mobile Application: Native mobile applications for iOS and Android platforms.',
+    style='List Bullet'
+)
+
+# 11.4 Technical Debt and Recommendations
+add_heading_with_bookmark(doc, '11.4 Technical Debt and Recommendations', level=2)
+doc.add_paragraph(
+    'The following technical recommendations should be addressed to maintain and improve '
+    'the system over time:'
+)
+
+doc.add_paragraph(
+    'API Versioning: Implement API versioning (e.g., /api/v1/) to support backward '
+    'compatibility during future updates.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Caching Layer: Introduce Redis caching for frequently accessed data and embedding '
+    'results to improve response times.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Monitoring and Logging: Implement comprehensive logging with ELK stack or similar '
+    'solutions for production monitoring.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'CI/CD Pipeline: Establish automated testing and deployment pipelines for '
+    'continuous integration and delivery.',
+    style='List Bullet'
+)
+doc.add_paragraph(
+    'Load Testing: Conduct thorough load testing to identify performance bottlenecks '
+    'under high concurrency scenarios.',
+    style='List Bullet'
+)
+
+# 11.5 Final Remarks
+add_heading_with_bookmark(doc, '11.5 Final Remarks', level=2)
+doc.add_paragraph(
+    'The Ask Holmes application represents a modern implementation of RAG technology, '
+    'combining the rich literary world of Sherlock Holmes with cutting-edge AI capabilities. '
+    'The system architecture ensures maintainability, scalability, and extensibility, '
+    'providing a solid foundation for future development.'
+)
+
+doc.add_paragraph(
+    'This SRS document serves as the authoritative reference for the Ask Holmes application, '
+    'providing all necessary information for development, testing, deployment, and maintenance. '
+    'All stakeholders are encouraged to refer to this document throughout the project lifecycle '
+    'and to propose updates as the system evolves.'
+)
+
+doc.add_paragraph(
+    'The successful implementation of this specification will deliver a valuable tool for '
+    'Sherlock Holmes enthusiasts, researchers, and casual readers alike, enabling them to '
+    'explore and interact with the classic detective stories in an innovative and engaging way.'
+)
 
 # Save the document
 doc.save('SRS_Ask_Holmes.docx')
