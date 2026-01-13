@@ -1,0 +1,368 @@
+classDiagram
+    direction TB
+
+    %% ============================================
+    %% BACKEND - MODELS
+    %% ============================================
+    namespace BackendModels {
+        class User {
+            +UUID id
+            +String email
+            +DateTime created_at
+            +List~Question~ questions
+            +to_dict() dict
+        }
+
+        class Question {
+            +UUID id
+            +UUID user_id
+            +Text question
+            +Text answer
+            +DateTime created_at
+            +DateTime updated_at
+            +to_dict() dict
+        }
+
+        class Document {
+            +UUID id
+            +String filename
+            +String title
+            +String file_hash
+            +DateTime indexed_at
+            +Integer chunk_count
+            +List~DocumentChunk~ chunks
+            +to_dict() dict
+        }
+
+        class DocumentChunk {
+            +UUID id
+            +UUID document_id
+            +Text chunk_text
+            +Integer chunk_index
+            +Vector embedding
+            +DateTime created_at
+            +to_dict() dict
+        }
+    }
+
+    User "1" *-- "0..*" Question : owns
+    Document "1" *-- "0..*" DocumentChunk : contains
+
+    %% ============================================
+    %% BACKEND - SERVICES
+    %% ============================================
+    namespace BackendServices {
+        class AuthService {
+            +authenticate_by_email(email) tuple
+            +get_user_by_id(user_id) User
+            +create_user(email) tuple
+        }
+
+        class QuestionService {
+            +get_user_questions(user_id) List
+            +get_question_by_id(id, user_id) Question
+            +create_question(user_id, question, answer) tuple
+            +update_question(id, user_id, question, answer) tuple
+            +delete_question(id, user_id) tuple
+        }
+
+        class RAGService {
+            -PDFProcessor pdf_processor
+            -EmbeddingModel embedding_model
+            -LLMClient llm_client
+            +index_document(pdf_path) tuple
+            +index_all_documents() tuple
+            +search_similar_chunks(query, top_k) List
+            +generate_answer(question) tuple
+            +get_indexed_documents() List
+            +delete_document(document_id) tuple
+        }
+    }
+
+    %% ============================================
+    %% BACKEND - UTILITIES
+    %% ============================================
+    namespace BackendUtilities {
+        class Config {
+            +String DATABASE_URL
+            +String ANTHROPIC_API_KEY
+            +int CHUNK_SIZE
+            +int CHUNK_OVERLAP
+            +int TOP_K_RESULTS
+            +String EMBEDDING_MODEL
+            +int EMBEDDING_DIMENSION
+            +String BOOKS_FOLDER
+        }
+
+        class EmbeddingModel {
+            -EmbeddingModel _instance
+            -SentenceTransformer _model
+            +embed(text) List~float~
+            +embed_batch(texts) List~List~
+        }
+
+        class PDFProcessor {
+            -int chunk_size
+            -int chunk_overlap
+            +extract_text(pdf_path) String
+            +clean_text(text) String
+            +chunk_text(text) List~String~
+            +calculate_file_hash(pdf_path) String
+            +process_pdf(pdf_path) dict
+        }
+
+        class LLMClient {
+            -Anthropic client
+            -String model
+            +generate_answer(question, context) String
+        }
+    }
+
+    %% ============================================
+    %% BACKEND - API ROUTES
+    %% ============================================
+    namespace BackendRoutes {
+        class questions_bp {
+            +GET /api/questions
+            +GET /api/questions/id
+            +POST /api/questions
+            +PUT /api/questions/id
+            +DELETE /api/questions/id
+        }
+
+        class auth_bp {
+            +POST /api/auth/login
+            +POST /api/auth/register
+            +GET /api/auth/user/id
+        }
+
+        class rag_bp {
+            +POST /api/rag/index
+            +POST /api/rag/query
+            +POST /api/rag/search
+            +GET /api/rag/documents
+            +DELETE /api/rag/documents/id
+        }
+    }
+
+    %% ============================================
+    %% FRONTEND - PAGES
+    %% ============================================
+    namespace FrontendPages {
+        class LoginPage {
+            -String email
+            -Boolean loading
+            -String error
+            +handleSubmit(event) void
+            +render() JSX
+        }
+
+        class HomePage {
+            -Array questions
+            -Boolean loading
+            -String error
+            -Object toast
+            -Object editingQuestion
+            -Boolean isModalOpen
+            +fetchQuestions() Promise
+            +handleCreate(question, answer) Promise
+            +handleUpdate(id, question, answer) Promise
+            +handleDelete(id) Promise
+            +handleAskDocuments(question) Promise
+            +render() JSX
+        }
+    }
+
+    %% ============================================
+    %% FRONTEND - COMPONENTS
+    %% ============================================
+    namespace FrontendComponents {
+        class Header {
+            +render() JSX
+        }
+
+        class Modal {
+            +Boolean isOpen
+            +Function onClose
+            +String title
+            +ReactNode children
+            +render() JSX
+        }
+
+        class Toast {
+            +String message
+            +String type
+            +Function onClose
+            +render() JSX
+        }
+
+        class QuestionList {
+            +Array questions
+            +Function onEdit
+            +Function onDelete
+            +render() JSX
+        }
+
+        class QuestionItem {
+            +Object question
+            +Function onEdit
+            +Function onDelete
+            -Boolean menuOpen
+            -Boolean confirmDelete
+            +handleEdit() void
+            +handleDeleteClick() void
+            +render() JSX
+        }
+
+        class QuestionForm {
+            +Function onSubmit
+            +Function onAskDocuments
+            +Object editingQuestion
+            -String question
+            -String answer
+            -Boolean loading
+            -Boolean askingDocs
+            +handleSubmit(event) Promise
+            +handleAskDocuments() Promise
+            +render() JSX
+        }
+    }
+
+    %% ============================================
+    %% FRONTEND - SERVICES
+    %% ============================================
+    namespace FrontendServices {
+        class ApiError {
+            +String message
+            +Number status
+        }
+
+        class authApi {
+            +login(email) Promise
+            +register(email) Promise
+            +getUser(userId) Promise
+        }
+
+        class questionsApi {
+            +getAll(userId) Promise
+            +getOne(userId, questionId) Promise
+            +create(userId, question, answer) Promise
+            +update(userId, questionId, question, answer) Promise
+            +delete(userId, questionId) Promise
+        }
+
+        class ragApi {
+            +indexDocuments() Promise
+            +query(question) Promise
+            +getDocuments() Promise
+            +deleteDocument(documentId) Promise
+            +searchChunks(query, topK) Promise
+        }
+    }
+
+    %% ============================================
+    %% FRONTEND - CONTEXT
+    %% ============================================
+    namespace FrontendContext {
+        class AuthContext {
+            +Object user
+            +Function login
+            +Function logout
+        }
+
+        class App {
+            -Object user
+            -Boolean loading
+            +login(userData) void
+            +logout() void
+            +render() JSX
+        }
+    }
+
+    %% ============================================
+    %% EXTERNAL SYSTEMS
+    %% ============================================
+    namespace ExternalSystems {
+        class PostgreSQL {
+            +Table users
+            +Table questions
+            +Table documents
+            +Table document_chunks
+            pgvector extension
+            IVFFlat index
+        }
+
+        class ClaudeAPI {
+            +create() Message
+            Model: claude-3-haiku
+        }
+
+        class SentenceTransformers {
+            +encode() ndarray
+            Model: all-MiniLM-L6-v2
+        }
+    }
+
+    %% ============================================
+    %% RELATIONSHIPS - Services to Models
+    %% ============================================
+    AuthService ..> User : manages
+    QuestionService ..> Question : manages
+    RAGService ..> Document : manages
+    RAGService ..> DocumentChunk : manages
+
+    %% ============================================
+    %% RELATIONSHIPS - RAGService Dependencies
+    %% ============================================
+    RAGService --> PDFProcessor : uses
+    RAGService --> EmbeddingModel : uses
+    RAGService --> LLMClient : uses
+
+    %% ============================================
+    %% RELATIONSHIPS - Utilities to Config
+    %% ============================================
+    EmbeddingModel ..> Config : reads
+    PDFProcessor ..> Config : reads
+    LLMClient ..> Config : reads
+
+    %% ============================================
+    %% RELATIONSHIPS - Routes to Services
+    %% ============================================
+    questions_bp ..> QuestionService : delegates
+    auth_bp ..> AuthService : delegates
+    rag_bp ..> RAGService : delegates
+
+    %% ============================================
+    %% RELATIONSHIPS - Frontend API to Backend
+    %% ============================================
+    authApi ..> auth_bp : HTTP
+    questionsApi ..> questions_bp : HTTP
+    ragApi ..> rag_bp : HTTP
+
+    %% ============================================
+    %% RELATIONSHIPS - Frontend Components
+    %% ============================================
+    HomePage --> QuestionList : renders
+    HomePage --> QuestionForm : renders
+    HomePage --> Modal : renders
+    HomePage --> Header : renders
+    HomePage --> Toast : renders
+    QuestionList --> QuestionItem : renders
+
+    %% ============================================
+    %% RELATIONSHIPS - Context
+    %% ============================================
+    App --> AuthContext : provides
+    LoginPage ..> AuthContext : uses
+    HomePage ..> AuthContext : uses
+    Header ..> AuthContext : uses
+
+    %% ============================================
+    %% RELATIONSHIPS - External Systems
+    %% ============================================
+    LLMClient --> ClaudeAPI : calls
+    EmbeddingModel --> SentenceTransformers : uses
+    User --> PostgreSQL : persisted
+    Question --> PostgreSQL : persisted
+    Document --> PostgreSQL : persisted
+    DocumentChunk --> PostgreSQL : persisted

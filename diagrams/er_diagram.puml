@@ -1,0 +1,45 @@
+erDiagram
+    %% ============================================
+    %% ENTITY RELATIONSHIP DIAGRAM
+    %% Ask Holmes Application Database Schema
+    %% ============================================
+
+    USERS {
+        UUID id PK "Primary Key, auto-generated"
+        VARCHAR(255) email UK "Unique, indexed, not null"
+        TIMESTAMP created_at "Default: current timestamp"
+    }
+
+    QUESTIONS {
+        UUID id PK "Primary Key, auto-generated"
+        UUID user_id FK "Foreign Key to users.id"
+        TEXT question "Not null, question content"
+        TEXT answer "Nullable, answer content"
+        TIMESTAMP created_at "Default: current timestamp, indexed"
+        TIMESTAMP updated_at "Auto-updated on modification"
+    }
+
+    DOCUMENTS {
+        UUID id PK "Primary Key, auto-generated"
+        VARCHAR(255) filename "Indexed, not null"
+        VARCHAR(500) title "Nullable, extracted from filename"
+        VARCHAR(64) file_hash UK "Unique, SHA-256 hash"
+        TIMESTAMP indexed_at "Default: current timestamp"
+        INTEGER chunk_count "Default: 0"
+    }
+
+    DOCUMENT_CHUNKS {
+        UUID id PK "Primary Key, auto-generated"
+        UUID document_id FK "Foreign Key to documents.id"
+        TEXT chunk_text "Not null, text segment"
+        INTEGER chunk_index "Not null, position in document"
+        VECTOR(384) embedding "pgvector, 384 dimensions"
+        TIMESTAMP created_at "Default: current timestamp"
+    }
+
+    %% ============================================
+    %% RELATIONSHIPS
+    %% ============================================
+
+    USERS ||--o{ QUESTIONS : "owns"
+    DOCUMENTS ||--o{ DOCUMENT_CHUNKS : "contains"
